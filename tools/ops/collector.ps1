@@ -15,6 +15,18 @@
     restart -- [2026-09-29, docs/collector-halt-fixes-spec.md §3] stops and relaunches the SAME
                build, then runs deploy's two-row gate. Writes NO file on the box. Needs -Yes;
                without it, prints the plan and stops. Exit codes as deploy's.
+    install-watchdog -- [2026-10-01, docs/collector-watchdog-spec.md section 2.5] copies
+               tools/ops/collector-watchdog.ps1 to C:\DeribitEngine\watchdog\ through S3 (outside
+               the six-item allowlist), registers task DeribitCollectorWatchdog (administrator,
+               Interactive, at logon + every 10 min, no parallel instances), then runs one tick.
+               Needs -Yes; without it, plan only. Idempotent. Exit 0 installed and one tick seen;
+               1 nothing changed; 2 wrote to the box but did not confirm.
+    uninstall-watchdog -- unregisters that task. Leaves the script and watchdog.log in place.
+               Needs -Yes; without it, plan only.
+
+  deploy and restart write C:\DeribitEngine\watchdog.pause BEFORE they stop the app and delete it
+  AFTER the gate, on every path (a try/finally), so a watchdog tick never launches the old exe in
+  the gap (docs/collector-watchdog-spec.md section 2.4, WDG-4).
 
   Out of scope, named so it is never assumed back in (proposal §2.7):
     - No pooling/dedup/analysis in `fetch` -- it moves bytes. The §3b minute-key dedup in
@@ -50,7 +62,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('status', 'fetch', 'deploy', 'restart')]
+    [ValidateSet('status', 'fetch', 'deploy', 'restart', 'install-watchdog', 'uninstall-watchdog')]
     [string]$Verb,
 
     # D-7: named explicitly on every invocation, no default. A tool that defaults to a
@@ -77,7 +89,7 @@ param(
 
     # restart only (docs/collector-halt-fixes-spec.md §3, CH-7): without -Yes, restart prints its
     # plan and stops with nothing changed. A seat's shell cannot answer a prompt, so the explicit
-    # switch is the deliberate step.
+    # switch is the deliberate step. [2026-10-01] install-watchdog and uninstall-watchdog use it too.
     [switch]$Yes
 )
 
@@ -154,7 +166,11 @@ $OptionalPdb = 'DeribitVerdictEngine.pdb'
 # docs/collector-halt-fixes-spec.md). Before it, an auto-run exception raised a modal box and the
 # cause stayed on the screen of an unattended box. Absent until the first failure, which the
 # absent-on-box arm already handles.
-$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv', 'ws_feed.log', 'absorption_episodes.log', 'run_errors.log')
+# [2026-10-01] watchdog.log -- the box watchdog's own record (tools/ops/collector-watchdog.ps1,
+# docs/collector-watchdog-spec.md section 2.3). It is also the watchdog's restart-count state (WDG-3),
+# so what the first seat after the holiday reads is exactly what the rule acted on. Absent until the
+# watchdog is installed, which the absent-on-box arm already handles.
+$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv', 'ws_feed.log', 'absorption_episodes.log', 'run_errors.log', 'watchdog.log')
 # [RIDER-2b] Every rotated analysis_log book on the box matches this. Discovered at fetch time.
 $BakFilter = 'analysis_log.csv*.bak'
 $FetchDirs  = @('backtest_data', 'settings_snapshots')
@@ -586,6 +602,16 @@ function Invoke-Deploy {
     $resp = Read-Host "Proceed with deploy to $InstanceId ? [y/N]"
     if ($resp -notmatch '^(y|yes)$') { Warn 'declined -- no changes made'; exit 1 }
 
+    # -- Step 3b: pause the box watchdog BEFORE the stop (docs/collector-watchdog-spec.md section 2.4,
+    # trap 1). Without it, a tick in the ~2 min gap sees no process and launches the OLD exe, which
+    # locks the files. If the marker cannot be confirmed, nothing has changed yet -- abort here.
+    if (-not (Set-WatchdogPause -Context 'deploy')) { Fail 'could not confirm the watchdog pause marker -- aborting before the stop. Nothing changed.'; exit 1 }
+
+    # Steps 4-9 run inside try/finally so the marker is removed on EVERY path: success, each exit 1
+    # and exit 2, and every rollback (`exit` inside try runs the finally -- checked on PS 5.1). The
+    # block is deliberately NOT re-indented, to keep this diff reviewable.
+    try {
+
     # -- Step 4: stop the app. ----------------------------------------------------------------
     Section '4. stop the app'
     # [2026-08-23] Body moved to Stop-RemoteApp so Invoke-Rollback shares it verbatim.
@@ -725,6 +751,10 @@ function Invoke-Deploy {
     Fail 'gate did not pass within 12 minutes -- the analysis loop is not producing rows at cadence (process may still be up, and one row alone does not pass)'
     Invoke-Rollback -RemoteDir $remoteDir | Out-Null
     exit 2
+
+    } finally {
+        Clear-WatchdogPause -Context 'deploy'
+    }
 }
 
 <#
@@ -772,6 +802,10 @@ at cadence.
 #>
 function Invoke-Rollback {
     param([Parameter(Mandatory = $true)][string]$RemoteDir)
+    # [2026-10-01] Re-write the watchdog pause marker: that resets its 45 min age. A deploy that
+    # reaches a gate-timeout rollback has already spent up to ~20 min, and the rollback adds its own
+    # stop + restore + 12 min gate. The deploy's finally removes the marker afterwards.
+    if (-not (Set-WatchdogPause -Context 'rollback')) { Warn 'could not refresh the watchdog pause marker -- the watchdog may act if this rollback runs past the 45 min expiry' }
     # ⛔ [2026-08-23] STOP BEFORE RESTORING. On the gate-timeout path the app is RUNNING --
     # step 8 restarted it -- so Restore-DeployBackup would try to overwrite a locked .exe.
     # Measured live 2026-08-22: the restore aborted on the lock, Start-RemoteApp ran anyway,
@@ -1090,20 +1124,244 @@ function Invoke-Restart {
     Info 'will: stop the app (if running), relaunch the SAME build, then wait for 2 new rows >=45 s apart (12 min max)'
     if (-not $Yes) { Warn 'no -Yes: stopping here. Nothing changed.'; exit 1 }
 
-    Section '3. stop'
-    if (-not (Stop-RemoteApp -Context 'restart')) { Fail 'could not confirm the app stopped -- nothing relaunched'; exit 2 }
+    # [2026-10-01] Pause the box watchdog BEFORE the stop, remove it after the gate on every path
+    # (docs/collector-watchdog-spec.md section 2.4). Same shape as deploy's step 3b.
+    if (-not (Set-WatchdogPause -Context 'restart')) { Fail 'could not confirm the watchdog pause marker -- aborting before the stop. Nothing changed.'; exit 1 }
+    try {
+        Section '3. stop'
+        if (-not (Stop-RemoteApp -Context 'restart')) { Fail 'could not confirm the app stopped -- nothing relaunched'; exit 2 }
 
-    Section '4. relaunch'
-    $restartUtc = (Get-Date).ToUniversalTime()
-    if (-not (Start-RemoteApp -RemoteDir $remoteDir)) { Fail 'relaunch did not confirm a running process -- STOP AND INVESTIGATE BY HAND'; exit 2 }
+        Section '4. relaunch'
+        $restartUtc = (Get-Date).ToUniversalTime()
+        if (-not (Start-RemoteApp -RemoteDir $remoteDir)) { Fail 'relaunch did not confirm a running process -- STOP AND INVESTIGATE BY HAND'; exit 2 }
 
-    Section '5. acceptance gate (2 new CSV rows >=45s apart, within 12 minutes)'
-    if (Wait-DeployGate -RestartUtc $restartUtc -RemoteDir $remoteDir) {
-        Ok 'RESTARTED -- the analysis loop fired more than once on the same build.'
-        Info 'If this restart answered a halt, read run_errors.log and ws_feed.log (collector.ps1 fetch) for its cause.'
+        Section '5. acceptance gate (2 new CSV rows >=45s apart, within 12 minutes)'
+        if (Wait-DeployGate -RestartUtc $restartUtc -RemoteDir $remoteDir) {
+            Ok 'RESTARTED -- the analysis loop fired more than once on the same build.'
+            Info 'If this restart answered a halt, read run_errors.log and ws_feed.log (collector.ps1 fetch) for its cause.'
+            exit 0
+        }
+        Fail 'gate did not pass within 12 minutes -- the app is up but not producing rows at cadence. STOP AND INVESTIGATE BY HAND.'
+        exit 2
+    } finally {
+        Clear-WatchdogPause -Context 'restart'
+    }
+}
+
+# ===========================================================================
+# [2026-10-01] The box watchdog (docs/collector-watchdog-spec.md). The pause marker helpers are
+# shared by deploy, restart and rollback; the two verbs install and remove the scheduled task.
+# The paths are FIXED, not derived from a running process: the watchdog script uses the same
+# fixed defaults, and a marker written anywhere else is a marker it never sees.
+# ===========================================================================
+$WatchdogPausePath    = 'C:\DeribitEngine\watchdog.pause'
+$WatchdogLogPath      = 'C:\DeribitEngine\watchdog.log'
+$WatchdogRemoteDir    = 'C:\DeribitEngine\watchdog'
+$WatchdogRemoteScript = 'C:\DeribitEngine\watchdog\collector-watchdog.ps1'
+$WatchdogTaskName     = 'DeribitCollectorWatchdog'
+$WatchdogTickMin      = 10   # the spec's tick (WDG-2); the script's $WdTickMin states the same number
+
+<# Writes (or re-writes, which resets its age) the pause marker and CONFIRMS it exists. #>
+function Set-WatchdogPause {
+    param([Parameter(Mandatory = $true)][string]$Context)
+    $cmds = @(
+        "`$m = '$WatchdogPausePath'",
+        "try { Set-Content -LiteralPath `$m -Value ('$Context ' + (Get-Date).ToUniversalTime().ToString('u')) -Encoding ascii -ErrorAction Stop } catch { 'PAUSE_ERROR=' + `$_.Exception.Message }",
+        "if (Test-Path -LiteralPath `$m) { 'PAUSE_SET=true' } else { 'PAUSE_SET=false' }"
+    )
+    try { $r = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $cmds -TimeoutSec 60 }
+    catch { Fail "pause marker: SSM call failed -- $($_.Exception.Message)"; return $false }
+    if ($r.Status -eq 'Success' -and $r.StdOut -match 'PAUSE_SET=true') { Ok "watchdog pause marker written ($Context) -- $WatchdogPausePath"; return $true }
+    Fail "watchdog pause marker NOT confirmed ($Context): $($r.StdOut) $($r.StdErr)"
+    return $false
+}
+
+<# Removes the marker and CONFIRMS it is gone. Never throws: it runs inside finally blocks. #>
+function Clear-WatchdogPause {
+    param([Parameter(Mandatory = $true)][string]$Context)
+    $cmds = @(
+        "Remove-Item -LiteralPath '$WatchdogPausePath' -Force -ErrorAction SilentlyContinue",
+        "if (Test-Path -LiteralPath '$WatchdogPausePath') { 'PAUSE_CLEARED=false' } else { 'PAUSE_CLEARED=true' }"
+    )
+    try {
+        $r = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $cmds -TimeoutSec 60
+        if ($r.Status -eq 'Success' -and $r.StdOut -match 'PAUSE_CLEARED=true') { Ok "watchdog pause marker removed ($Context)"; return }
+        Warn "watchdog pause marker NOT confirmed removed ($Context): $($r.StdOut) $($r.StdErr)"
+    } catch {
+        Warn "watchdog pause marker removal: SSM call failed ($Context) -- $($_.Exception.Message)"
+    }
+    Warn "the watchdog stays paused until the marker is 45 min old, then ignores it. Remove $WatchdogPausePath by hand to resume it sooner."
+}
+
+function Invoke-InstallWatchdog {
+    Section "install-watchdog -- $InstanceId ($Region)  [PRODUCTION -- confirm this is the intended box]"
+
+    # -- 1. pre-flight, local. The installed script must be a parse-clean, ASCII, committed file.
+    Section '1. pre-flight (local)'
+    $localScript = Join-Path $PSScriptRoot 'collector-watchdog.ps1'
+    if (-not (Test-Path $localScript)) { Fail "missing: $localScript"; exit 1 }
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($localScript, [ref]$null, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) { Fail "collector-watchdog.ps1 has $($parseErrors.Count) parse error(s) -- nothing changed"; exit 1 }
+    # Windows PowerShell 5.1 on the box reads a BOM-less file as the ANSI code page.
+    $nonAscii = @([System.IO.File]::ReadAllBytes($localScript) | Where-Object { $_ -gt 127 }).Count
+    if ($nonAscii -gt 0) { Fail "collector-watchdog.ps1 holds $nonAscii non-ASCII byte(s) -- PS 5.1 would misread it on the box. Nothing changed."; exit 1 }
+    Push-Location $repo
+    try {
+        $dirty = git status --porcelain -- 'tools/ops/collector-watchdog.ps1'
+        $commit = (git rev-parse --short HEAD).Trim()
+    } finally { Pop-Location }
+    if ($dirty) { Fail 'tools/ops/collector-watchdog.ps1 has uncommitted changes -- commit it first, so the installed script is traceable. Nothing changed.'; exit 1 }
+    $localHash = (Get-FileHash $localScript -Algorithm SHA256).Hash
+    Ok "collector-watchdog.ps1 parse-clean, ASCII, committed at $commit, SHA256 $localHash"
+
+    # -- 2. pre-flight, remote. Read-only.
+    Section '2. pre-flight (remote)'
+    $preCmds = @(
+        "'EXE_PRESENT=' + (Test-Path 'C:\DeribitEngine\DeribitVerdictEngine.exe')",
+        "`$t = Get-ScheduledTask -TaskName '$WatchdogTaskName' -ErrorAction SilentlyContinue",
+        "if (`$t) { 'TASK_EXISTING=' + `$t.State } else { 'TASK_EXISTING=none' }",
+        "if (Test-Path '$WatchdogRemoteScript') { 'SCRIPT_EXISTING=' + (Get-FileHash '$WatchdogRemoteScript' -Algorithm SHA256).Hash } else { 'SCRIPT_EXISTING=none' }",
+        "`$w = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -ErrorAction SilentlyContinue",
+        "'AUTOLOGON=' + `$w.AutoAdminLogon + ' USER=' + `$w.DefaultUserName",
+        # An Interactive task runs only inside a logged-on session. explorer.exe owned by
+        # administrator is the observable sign of one.
+        "'ADMIN_SESSIONS=' + ((@(Get-Process explorer -IncludeUserName -ErrorAction SilentlyContinue | Where-Object { `$_.UserName -like '*\administrator' }) | ForEach-Object { `$_.SessionId }) -join ',')",
+        "'APP_COUNT=' + @(Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue).Count",
+        "if (Test-Path '$WatchdogPausePath') { 'PAUSE_MARKER=present' } else { 'PAUSE_MARKER=none' }"
+    )
+    $pre = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $preCmds -TimeoutSec 60
+    if ($pre.Status -ne 'Success') {
+        Fail "remote pre-flight failed (SSM status $($pre.Status)) -- nothing changed"
+        $pre.StdOut, $pre.StdErr | ForEach-Object { $_ -split "`r?`n" } | Where-Object { $_ } | ForEach-Object { Info $_ }
+        exit 1
+    }
+    $st = ConvertFrom-KeyValueLines $pre.StdOut
+    if ($st['EXE_PRESENT'] -ne 'True') { Fail 'C:\DeribitEngine\DeribitVerdictEngine.exe is absent -- the watchdog would fail every launch. Nothing changed.'; exit 1 }
+    Ok 'app exe present in C:\DeribitEngine'
+
+    # -- 3. plan.
+    Section '3. plan'
+    Info "target: $InstanceId ($Region)"
+    Info "script: $localScript @ $commit -> $WatchdogRemoteScript (outside the six-item allowlist)"
+    Info "existing script on box: $($st['SCRIPT_EXISTING'])   existing task: $($st['TASK_EXISTING'])"
+    Info "task: $WatchdogTaskName, user administrator, logon type Interactive, triggers at logon + every $WatchdogTickMin min, no parallel instances, 5 min run limit"
+    Info "log: $WatchdogLogPath   pause marker: $WatchdogPausePath ($($st['PAUSE_MARKER']))"
+    Info "box: $($st['AUTOLOGON'])   administrator session(s): [$($st['ADMIN_SESSIONS'])]   app processes: $($st['APP_COUNT'])"
+    if ($st['AUTOLOGON'] -notmatch '^1 ') { Warn 'auto-logon is NOT enabled -- after a reboot nothing logs on, so neither the at-logon trigger nor any tick runs. Do docs/collector-watchdog-spec.md section 1 first.' }
+    if (-not $st['ADMIN_SESSIONS']) { Warn 'no administrator session is logged on -- an Interactive task does not run without one, so step 6 (one tick) will not confirm.' }
+    if ($st['APP_COUNT'] -eq '0') { Warn 'the app is NOT running -- the first tick will LAUNCH it (rule R4).' }
+    Info 'will: upload the script via S3, place it and verify its hash, register the task (replacing any existing one), run one tick'
+    if (-not $Yes) { Warn 'no -Yes: stopping here. Nothing changed.'; exit 1 }
+
+    # -- 4. upload -> place -> verify hash.
+    Section '4. upload -> place -> verify hash'
+    $wstamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
+    $wkey = "s3://$Bucket/watchdog/$InstanceId/$wstamp/collector-watchdog.ps1"
+    Invoke-Aws -Args @('s3', 'cp', $localScript, $wkey, '--only-show-errors') | Out-Null
+    Ok "uploaded to $wkey"
+    $placeCmds = @(
+        $PathRefreshCmd,
+        "New-Item -ItemType Directory -Force '$WatchdogRemoteDir' | Out-Null",
+        "aws s3 cp `"$wkey`" '$WatchdogRemoteScript' --only-show-errors",
+        "if (`$LASTEXITCODE -ne 0) { 'PLACED=failed'; exit 1 }",
+        "'PLACED_HASH=' + (Get-FileHash '$WatchdogRemoteScript' -Algorithm SHA256).Hash"
+    )
+    $pl = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $placeCmds -TimeoutSec 120
+    $plv = ConvertFrom-KeyValueLines $pl.StdOut
+    if ($pl.Status -ne 'Success' -or $plv['PLACED_HASH'] -ne $localHash) {
+        Fail "place did not verify (SSM $($pl.Status), box hash [$($plv['PLACED_HASH'])] vs local $localHash). The task was NOT (re)registered. If a task already existed it now runs whatever is at $WatchdogRemoteScript -- check by hand."
+        $pl.StdOut, $pl.StdErr | ForEach-Object { $_ -split "`r?`n" } | Where-Object { $_ } | ForEach-Object { Info $_ }
+        exit 2
+    }
+    Ok "placed at $WatchdogRemoteScript -- hash matches"
+
+    # -- 5. register the task (WDG-1) and read it back. -Force replaces an existing task.
+    Section '5. register the task'
+    $argLine = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$WatchdogRemoteScript`""
+    $regCmds = @(
+        "`$a = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '$argLine'",
+        "`$t1 = New-ScheduledTaskTrigger -AtLogOn -User 'administrator'",
+        # No -RepetitionDuration: on PS 5.1 that yields an EMPTY duration, which is 'indefinitely'.
+        # The read-back below REFUSES anything else, so a box that builds it differently fails loudly.
+        "`$t2 = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes $WatchdogTickMin)",
+        # Limited, as Start-RemoteApp's schtasks /it launch is: the watchdog's app is started with the
+        # same token level as deploy's, so it can also stop what deploy started.
+        "`$p = New-ScheduledTaskPrincipal -UserId 'administrator' -LogonType Interactive -RunLevel Limited",
+        # 5 min run limit: a tick is seconds long; a HUNG tick would otherwise block every later tick
+        # for the 72 h default, because IgnoreNew skips new starts while one runs.
+        "`$s = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable",
+        "try { Register-ScheduledTask -TaskName '$WatchdogTaskName' -Action `$a -Trigger @(`$t1, `$t2) -Principal `$p -Settings `$s -Force -ErrorAction Stop | Out-Null; 'REGISTERED=true' } catch { 'REGISTERED=false ' + `$_.Exception.Message; exit 1 }",
+        "`$t = Get-ScheduledTask -TaskName '$WatchdogTaskName'",
+        "'TASK_STATE=' + `$t.State",
+        "'TASK_PRINCIPAL=' + `$t.Principal.UserId + '|' + `$t.Principal.LogonType",
+        "'TASK_MULTI=' + `$t.Settings.MultipleInstances",
+        "'TASK_LIMIT=' + `$t.Settings.ExecutionTimeLimit",
+        "'TASK_TRIGGERS=' + ((`$t.Triggers | ForEach-Object { (`$_.CimClass.CimClassName -replace 'MSFT_Task','') + '|' + `$_.UserId + '|' + `$_.Repetition.Interval + '|' + `$_.Repetition.Duration }) -join ';')"
+    )
+    $rg = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $regCmds -TimeoutSec 90
+    $rgv = ConvertFrom-KeyValueLines $rg.StdOut
+    $rg.StdOut -split "`r?`n" | Where-Object { $_ } | ForEach-Object { Info $_ }
+    $trig = @(($rgv['TASK_TRIGGERS'] + '') -split ';' | Where-Object { $_ })
+    $logonOk = @($trig | Where-Object { $_ -match '^LogonTrigger\|.*administrator' }).Count -eq 1
+    $timeOk  = @($trig | Where-Object { $_ -match "^TimeTrigger\|[^|]*\|PT$($WatchdogTickMin)M\|$" }).Count -eq 1
+    $regOk = ($rg.Status -eq 'Success' -and $rgv['REGISTERED'] -eq 'true' -and $rgv['TASK_PRINCIPAL'] -match '\|Interactive$' -and
+              $rgv['TASK_MULTI'] -eq 'IgnoreNew' -and $trig.Count -eq 2 -and $logonOk -and $timeOk)
+    if (-not $regOk) {
+        Fail "the task did not register as specified (logon trigger ok=$logonOk, 10-min indefinite trigger ok=$timeOk). The script is placed; check the task by hand, or run uninstall-watchdog."
+        if ($rg.StdErr) { $rg.StdErr -split "`r?`n" | ForEach-Object { Info $_ } }
+        exit 2
+    }
+    Ok "task $WatchdogTaskName registered: Interactive, at logon of administrator + every $WatchdogTickMin min indefinitely, IgnoreNew"
+
+    # -- 6. one tick, through the task (never run the script from SSM: that is session 0, and a
+    # launch from there would put the app where no one can see it).
+    Section '6. one tick'
+    $tickCmds = @(
+        "`$before = (Get-Date).AddSeconds(-2)",
+        "Start-ScheduledTask -TaskName '$WatchdogTaskName'",
+        "`$ran = `$false",
+        "for (`$i = 0; `$i -lt 45; `$i++) {",
+        "  Start-Sleep -Seconds 2",
+        "  `$t = Get-ScheduledTask -TaskName '$WatchdogTaskName'; `$ti = `$t | Get-ScheduledTaskInfo",
+        "  if (`$ti.LastRunTime -ge `$before -and `$t.State -ne 'Running') { `$ran = `$true; break }",
+        "}",
+        "'TICK_RAN=' + `$ran",
+        "'TICK_RESULT=' + `$ti.LastTaskResult",
+        "'TICK_STATE=' + `$t.State",
+        "if (Test-Path '$WatchdogLogPath') { Get-Content '$WatchdogLogPath' -Tail 6 | ForEach-Object { 'LOG ' + `$_ } } else { 'LOG ABSENT' }"
+    )
+    $tk = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $tickCmds -TimeoutSec 180
+    $tkv = ConvertFrom-KeyValueLines $tk.StdOut
+    $tk.StdOut -split "`r?`n" | Where-Object { $_ -like 'LOG *' } | ForEach-Object { Info $_ }
+    if ($tk.Status -eq 'Success' -and $tkv['TICK_RAN'] -eq 'True' -and $tkv['TICK_RESULT'] -eq '0') {
+        Ok "one tick ran through the task (result 0). Installed. Check the LOG lines above: expect START and/or HEARTBEAT, and no ERROR."
+        if ($tk.StdOut -match '\| ERROR \|') { Warn 'an ERROR line is in the log tail -- read it before relying on the watchdog.' }
         exit 0
     }
-    Fail 'gate did not pass within 12 minutes -- the app is up but not producing rows at cadence. STOP AND INVESTIGATE BY HAND.'
+    Fail "the task is registered but one tick did NOT confirm (ran=$($tkv['TICK_RAN']) result=$($tkv['TICK_RESULT']) state=$($tkv['TICK_STATE'])). Most likely no administrator session is logged on (docs/collector-watchdog-spec.md section 1)."
+    exit 2
+}
+
+function Invoke-UninstallWatchdog {
+    Section "uninstall-watchdog -- $InstanceId ($Region)"
+    $preCmds = @(
+        "`$t = Get-ScheduledTask -TaskName '$WatchdogTaskName' -ErrorAction SilentlyContinue",
+        "if (`$t) { 'TASK_EXISTING=' + `$t.State } else { 'TASK_EXISTING=none' }"
+    )
+    $pre = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $preCmds -TimeoutSec 60
+    if ($pre.Status -ne 'Success') { Fail "remote pre-flight failed (SSM status $($pre.Status)) -- nothing changed"; exit 1 }
+    $st = ConvertFrom-KeyValueLines $pre.StdOut
+    if ($st['TASK_EXISTING'] -eq 'none') { Ok "no task $WatchdogTaskName on the box -- nothing to uninstall"; exit 0 }
+    Info "will: unregister task $WatchdogTaskName (state $($st['TASK_EXISTING'])). $WatchdogRemoteScript and $WatchdogLogPath stay in place."
+    if (-not $Yes) { Warn 'no -Yes: stopping here. Nothing changed.'; exit 1 }
+    $unCmds = @(
+        "Unregister-ScheduledTask -TaskName '$WatchdogTaskName' -Confirm:`$false -ErrorAction SilentlyContinue",
+        "if (Get-ScheduledTask -TaskName '$WatchdogTaskName' -ErrorAction SilentlyContinue) { 'UNREGISTERED=false' } else { 'UNREGISTERED=true' }"
+    )
+    $un = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $unCmds -TimeoutSec 60
+    if ($un.Status -eq 'Success' -and $un.StdOut -match 'UNREGISTERED=true') { Ok "task $WatchdogTaskName unregistered -- the box has NO watchdog now"; exit 0 }
+    Fail "could not confirm the task is gone: $($un.StdOut) $($un.StdErr)"
     exit 2
 }
 
@@ -1112,4 +1370,6 @@ switch ($Verb) {
     'fetch'   { Invoke-Fetch }
     'deploy'  { Invoke-Deploy }
     'restart' { Invoke-Restart }
+    'install-watchdog'   { Invoke-InstallWatchdog }
+    'uninstall-watchdog' { Invoke-UninstallWatchdog }
 }

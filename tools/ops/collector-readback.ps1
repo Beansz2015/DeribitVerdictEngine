@@ -11,7 +11,9 @@
   Prints: the analysis_log.csv* files, the header width, the last rows (InstanceId, SignalId,
   TriggerMode, WsHealth, SettingsVersion ...), the absorption_episodes.log and repair_status.log tails,
   the ws_health.log tail, the run_errors.log line count and tail (C-8, docs/collector-halt-fixes-spec.md),
-  memory/commit/paging, and the liquidation probe's status line if it runs.
+  the box watchdog's WATCHDOG_TAIL (last 3 lines of watchdog.log, or ABSENT), its task state and its pause
+  marker age (docs/collector-watchdog-spec.md section 2.5 -- reads only: Get-ScheduledTask, Get-ScheduledTaskInfo,
+  Get-Item), memory/commit/paging, and the liquidation probe's status line if it runs.
 
   Usage:  powershell -NoProfile -ExecutionPolicy Bypass -File tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e
 #>
@@ -34,6 +36,7 @@ $cmds = @(
  '''REPAIR_TAIL''; if (Test-Path C:\DeribitEngine\repair_status.log) { Get-Content C:\DeribitEngine\repair_status.log -Tail 3 | ForEach-Object { $_.Substring(0, [math]::Min(220, $_.Length)) } }',
  '''WSHEALTH_TAIL''; Get-Content C:\DeribitEngine\ws_health.log -Tail 3',
  '''RUNERR_TAIL''; if (Test-Path C:\DeribitEngine\run_errors.log) { ''RUNERR_LINES='' + @(Get-Content C:\DeribitEngine\run_errors.log).Count; Get-Content C:\DeribitEngine\run_errors.log -Tail 3 | ForEach-Object { $_.Substring(0, [math]::Min(220, $_.Length)) } } else { ''ABSENT (no run error logged since the C-8 build)'' }',
+ '''WATCHDOG_TAIL''; if (Test-Path C:\DeribitEngine\watchdog.log) { Get-Content C:\DeribitEngine\watchdog.log -Tail 3 | ForEach-Object { $_.Substring(0, [math]::Min(220, $_.Length)) } } else { ''ABSENT'' }; $wt = Get-ScheduledTask -TaskName DeribitCollectorWatchdog -ErrorAction SilentlyContinue; if ($wt) { $wi = $wt | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue; ''WATCHDOG_TASK state='' + $wt.State + '' logon='' + $wt.Principal.LogonType + '' last='' + $wi.LastRunTime + '' result='' + $wi.LastTaskResult + '' next='' + $wi.NextRunTime } else { ''WATCHDOG_TASK=ABSENT'' }; if (Test-Path C:\DeribitEngine\watchdog.pause) { ''WATCHDOG_PAUSE age_min='' + [math]::Round(((Get-Date).ToUniversalTime() - (Get-Item C:\DeribitEngine\watchdog.pause).LastWriteTimeUtc).TotalMinutes, 1) } else { ''WATCHDOG_PAUSE=none'' }',
  '''TASKS (non-Microsoft)''; Get-ScheduledTask | Where-Object { $_.TaskPath -notlike ''\Microsoft\*'' } | ForEach-Object { $i = $_ | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue; ''TASK '' + $_.TaskPath + $_.TaskName + '' state='' + $_.State + '' run='' + (($_.Actions | ForEach-Object { $_.Execute + '' '' + $_.Arguments }) -join '';'') + '' triggers='' + (($_.Triggers | ForEach-Object { $_.CimClass.CimClassName -replace ''MSFT_Task'','''' }) -join '','') + '' last='' + $i.LastRunTime + '' result='' + $i.LastTaskResult }',
  '''STARTUP''; foreach ($p in @(''C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp'') + @(Get-ChildItem C:\Users -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName ''AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup'' })) { if (Test-Path $p) { Get-ChildItem $p -File | ForEach-Object { ''STARTUP_ITEM '' + $_.FullName } } }',
  '$w = Get-ItemProperty ''HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'' -ErrorAction SilentlyContinue; ''AUTOLOGON='' + $w.AutoAdminLogon + '' USER='' + $w.DefaultUserName',
