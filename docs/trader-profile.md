@@ -117,7 +117,7 @@ The trader's style, preferences and strategic context for the Deribit Verdict En
 
 ## 7. Open Questions / Known Limitations
 
-- **Liq large-penalty threshold** -- monitoring. Review indicators.Liquidations.large_liq_size (200 at v68) against the ~90th percentile of observed LiqLongSize/LiqShortSize in the CSV log.
+- **Liq large-penalty threshold** -- RESHAPED 2026-09-29 (trader ruling `HSR-4`): answered by one history-store study of real liquidation sizes with the dominance ratio, gated on the `D-4` re-ruling. Earlier text: monitoring. Review indicators.Liquidations.large_liq_size (200 at v68) against the ~90th percentile of observed LiqLongSize/LiqShortSize in the CSV log.
 - **ATR bands** -- review if BTC price moves significantly. The AvgATR/CurrATR ratio approach is self-calibrating, but the absolute Low/Normal/High bands may need updating. The bands live in the ATR thresholds block in section 5.
 
 **Resolved in the 2026-09-14 re-sync** (kept so they are not re-raised):

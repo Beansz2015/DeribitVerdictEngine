@@ -1,5 +1,7 @@
 # History store — what it drops or reshapes in the queue and roadmap — PROPOSAL
 
+> ✅ **RULED 2026-09-29 (trader): `HSR-1`–`HSR-13` accepted AS EVALUATED** in [`history-store-queue-reshape-evaluation.md`](history-store-queue-reshape-evaluation.md). That file's conditions and narrowings win over this proposal's rows; `HSR-13` is the CASCADE-watch item it added. Written into the docs the same day (index row in `trader-tick-queue.md` §2).
+
 **Status:** proposal, 2026-09-29 (UTC), for evaluation. The trader is passing it to the previous orchestrator seat, which wrote [`history-data-store-spec.md`](history-data-store-spec.md) and holds its full context. The reply comes back to this seat.
 **Asked by the trader 2026-09-29:** now that the history store will supply historical trades, which items in [`trader-tick-queue.md`](trader-tick-queue.md) and [`roadmap.md`](roadmap.md) should be dropped or changed?
 **Class:** documentation only. It moves no code, no settings key and no scoring. Nothing here is actioned before the rulings come back. The re-gated reads run after history-store stage 2b (the backfill), which is after 2026-11-25.
