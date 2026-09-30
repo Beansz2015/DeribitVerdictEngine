@@ -4,6 +4,20 @@
 
 ~~**Status: RUN 1 DIED. RUN 2 (dev machine) STOPPED. RUN 3 (box) STOPPED — its REST arm froze. ⭐ RUN 4 RUNNING ON THE AWS COLLECTOR BOX since 2026-09-24 16:53 UTC (PID 11248). The measurement has NOT returned yet.**~~ (superseded status line, kept)
 
+## 00000. ⭐ The history host flags late too — ~59.5 min, 7 of 7 (added 2026-09-30 UTC)
+
+**Run:** `tools/ops/liq-late-flag-watch.ps1 -Source history -Minutes 480` on the dev machine, 2026-09-30 09:29:47 → 17:30:48 UTC, PID 31576 (launched through WMI). Log `C:\probe-runs\liqlag\watch.log` (not committed). End line: `polls=973 flag_at_first_sight=0 late_flags=7 errors=0`.
+
+| First seen unflagged | Venue timestamp | Trades | Flag | Detected age |
+|---|---|---|---|---|
+| 13:35:59 | 13:35:37.801 – 13:35:48.230 | 6 (seqs 302198237, 302198294–296, 302198496–497) | `T` | 3,561 – 3,572 s |
+| 14:23:05 | 14:22:57.400 | 1 (seq 302232655) | `T` | 3,563 s |
+
+- **Two separate liquidation events, 7 trades, all flagged `T`, none at first sight.** Each was first seen 8–22 s after its venue timestamp with no flag. The flag was detected 3,561–3,572 s after the trade. The re-check runs every 60 s, so the flag arrived between about 58.5 and 59.5 min.
+- **This matches the main host** (~60 min, n = 1, §0000 below) **and the authenticated raw channel** (not flagged at first delivery, 0 of 3, [`raw-channel-liquidation-test-spec-back.md`](raw-channel-liquidation-test-spec-back.md) §7). **No source tested carries the flag in real time.**
+- **Consequence for `D-4`:** option (d) (poll the history host and feed the live vote from it) is ruled out by measurement. Remaining: (a) park the vote and the cascade alarm, and say so in code · (b) enrich from REST about 60–90 min late · (c) leave as is.
+- ⚠ **Not measured:** maker-side (`M`) flags. All 7 were `T`. Whether `M` is delayed the same way is not shown.
+
 ## 0000. ⛔ Run 4's zero is an INSTRUMENT MISS, not a quiet market (added 2026-09-28 UTC)
 
 **Finding.** Run 4 reported `flagged 0` after 5,442 min (2026-09-28 11:35 UTC). A seq-range scan of the probe's own endpoint, `public/get_last_trades_by_instrument`, over the 24 h to 2026-09-28 11:48 UTC returned **94 liquidation-flagged trades** in 221,321 trades, all inside run 4's uptime:
