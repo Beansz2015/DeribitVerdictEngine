@@ -1082,6 +1082,7 @@ function Invoke-Restart {
     $st = ConvertFrom-KeyValueLines $pre.StdOut
     $remoteDir = $st['REMOTE_DIR']
     if (-not $remoteDir) { Fail 'could not resolve the remote install directory -- nothing changed'; exit 1 }
+    Ok "box reachable -- $($st['PROC_COUNT']) app process(es), exe present in $remoteDir"
 
     Section '2. plan'
     Info "target: $InstanceId ($Region), dir $remoteDir"
@@ -1098,7 +1099,8 @@ function Invoke-Restart {
 
     Section '5. acceptance gate (2 new CSV rows >=45s apart, within 12 minutes)'
     if (Wait-DeployGate -RestartUtc $restartUtc -RemoteDir $remoteDir) {
-        Ok 'RESTARTED -- the analysis loop fired more than once on the same build. Check run_errors.log and ws_feed.log for why it had stopped.'
+        Ok 'RESTARTED -- the analysis loop fired more than once on the same build.'
+        Info 'If this restart answered a halt, read run_errors.log and ws_feed.log (collector.ps1 fetch) for its cause.'
         exit 0
     }
     Fail 'gate did not pass within 12 minutes -- the app is up but not producing rows at cadence. STOP AND INVESTIGATE BY HAND.'
