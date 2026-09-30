@@ -182,6 +182,8 @@ Two smaller notes:
 - `roadmap.md` §3 W3 still reads "**live-at-min-size unlocked**". The audit's three order-app S0s now gate arming autotrade (`AT-Q1`). A note was added to that row.
 - The C1 fix (the OHLC stub freeze) touches `LivePerformanceTracker`'s cache handling, as does the unspecced `_evalCache` decoupling (`roadmap.md` §4). **Spec them together**, or at least serialise them. Both rewrite what the eval cache holds.
 
+> ✅ **`AT-6` RULED 2026-09-29 (trader): (b) with the rule.** A scoring fix that does not touch TFI, aggressor velocity or the burst threshold may ship during burst run 2's window. Each one adds an era stratum and a pre-edge sensitivity run in run 2 (the spec's POC-gate precedent); a fix on the burst path is held. `roadmap.md` §5 rule 1 still binds: one boundary at a time, or a signed-off bundle. **The read below was (a); it was revised to (b)** because `burst-outcome-read-spec.md` §6.2 already handles a burst-independent fix that way. **Also ruled: run 2 runs per session** as each session becomes readable (NY ~2027-01-07, ASIA ~2027-02-24, LONDON ~2027-05, latest 2027-06-30). Both are written into `burst-outcome-read-spec.md` §6.1 and §6.2. L-7 still runs before any reserved fix ships.
+
 **New decision for the trader:**
 
 | ID | Decision | Options | My read |
