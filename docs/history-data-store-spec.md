@@ -147,6 +147,7 @@ The audit found box-store defects that are not fixed on the box, because that st
 | `H-3` | Re-run a completed day | No file change (byte-identical) |
 | `H-4` | Settle margin | No row younger than the constant at fetch time |
 | `H-5` | Harness and gate | Fixtures pass; `tools/checks/verify-gate.ps1` passes |
+| `H-6` | `tools/BacktestRunner` replay over one backfilled day of the dev store (11-column rows, `HDS-1`) | Reads every row; same trade count as the file; no parse errors (added 2026-09-29, [`history-store-queue-reshape-evaluation.md`](history-store-queue-reshape-evaluation.md)) |
 
 **Fixtures (new family at the next free ID):** the paging dedup (a synthetic page set with overlapping ms groups gives each seq once), the `has_more` split (a truncated page triggers a split, no seq lost), resume (a partial day re-run gives the same file as an uninterrupted run), and the settle margin. Each mutation-proved.
 
