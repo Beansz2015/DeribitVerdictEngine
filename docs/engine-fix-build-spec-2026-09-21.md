@@ -222,6 +222,14 @@ Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal 
 
 ## 4. Session B — the liquidation flag (`D-4`), attribution (`D-5`) and the unit (`D-6`)
 
+> ⛔⛔ **RE-RULED 2026-09-30 (UTC), trader: `D-4` = (a) PARK, with two riders. This supersedes the 2026-09-16 `D-4` text below ("parse the field, else enrich from REST, never retire the vote").**
+>
+> - **Why:** every source was measured, and none carries the liquidation flag in real time. The main host flags ~60 min late (n = 1); the authenticated raw channel flags nothing at first delivery (0 of 3, [`raw-channel-liquidation-test-spec-back.md`](raw-channel-liquidation-test-spec-back.md) §7); the history host flags 7 of 7 ~59.5 min late ([`liquidation-probe-run-2026-09-21.md`](liquidation-probe-run-2026-09-21.md) §00000). Option (d), polling the history host, is ruled out; (b), late REST enrichment, is useless for 1–3 min bars; (c), leaving it, is a silent defect.
+> - **(a):** park the Step 2 liquidation vote and the #7 cascade alarm with an explicit guard **in code** that says why (no real-time source). No live outcome changes: `LiqSignal` has been `NONE` on every row since v51.
+> - **Rider 1 — fix `L-2` anyway (`D-5`):** `CalcLiquidations` books `M` to the maker's side, `T` to the taker's, `MT` to both. Replays over the history store run it on real flags, so the liquidation-size study (`HSR-4`) needs the side right. It retires the ship gate's last known-defect skip (fixture `A81b`). Ships **with** the park, as `D-5` always required.
+> - **Rider 2 — A4 becomes a collector-era research study:** history-store liquidations joined to the per-run OFI values `analysis_log.csv` already logs (`HSR-11`). No live signal.
+> - **Still owed before a build:** this section re-specced for (a). It is a scoring-code change and a rendered-value question (what the LIQUIDATIONS section and the card show once parked), so it is reserved in both classes. Build: one agent, **ask the trader first**. Timing: after 2026-11-25 by default, as a fix off the burst path under `AT-6` (b).
+
 ### 4.1 Start here — the measurement, because the fix depends on it
 
 The trader ruled **measure first**: capture raw `trades.BTC-PERPETUAL.100ms` messages until a liquidation passes, read-only, on the dev machine.
