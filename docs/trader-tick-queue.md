@@ -44,7 +44,9 @@
 >
 > ⚠ **2026-09-24 13:30 UTC, the next seat:** `master` is AHEAD of `origin` again (the handover commit and later work, unpushed). BUILT, local, NOT DEPLOYED: engine-fix Sessions A (`a6b33fe`) and C (`ea32818`), and absorption S1 (`549b2c3`) and S2 (`5dfc91a`). Fixtures 468 `ALL PASS`. They go out as ONE deploy, reserved to the trader ([`absorption-d2-s2-batch-summary.md`](absorption-d2-s2-batch-summary.md) §5). The liquidation probe (Session B1) now runs ON THE AWS COLLECTOR BOX (trader ruling 2026-09-24). Its first run died on 2026-09-21 after 110 minutes, and no handover noticed. See the liquidation-flag row in `trader-tick-queue.md` §2.
 >
-> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-29.md`](seat-handover-2026-09-29.md)** — first actions: read-back · triage the trader's review package · decide history-store vs review fixes before the holiday · history-host liquidation-flag test · `D-4` re-ruling. Older banner follows.
+> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-10-01.md`](seat-handover-2026-10-01.md)** — first actions: read-back · walk the trader through the 21-month history backfill (runbook; AWS steps never run) · adversarial review of [`indicator-calibration-review-2026-10-02.md`](indicator-calibration-review-2026-10-02.md) when the trader asks · rule `D-6` · fetches with the history comparison ~10-04/~10-08/10-13 · dated reads. Older banner follows.
+>
+> ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-29.md`](seat-handover-2026-09-29.md)** — first actions: read-back · triage the trader's review package · decide history-store vs review fixes before the holiday · history-host liquidation-flag test · `D-4` re-ruling. Older banner follows.
 >
 > ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-25.md`](seat-handover-2026-09-25.md)** — settings v69 (Kelly one-class) deployed; the RR-1 gap-repair fix is DEPLOYED 2026-09-25 13:31 UTC (instance `a19acc4d…`; the live proof, no `trade_seq` range repaired twice under that instance, is still owed); the liquidation probe runs on the collector box with 0 flagged. Older banner follows.
 >
