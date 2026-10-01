@@ -131,12 +131,14 @@ Standard names for the numbers that say whether a signal makes money. Use these 
 | **Gross edge** | Success rate − gross breakeven rate, in pp. Diagnostic: does direction alone carry an edge? | — |
 | **Net edge** | Success rate − net breakeven rate, in pp | — |
 | **Net EV per trade** | Mean realised result per signal after fees, in bps. **The headline number** | mean of: +targetᵢ − feeᵢ on success · −stopᵢ − feeᵢ on a stop hit or ambiguity · markᵢ − feeᵢ on a timeout |
+| **Net EV per session-day** (added 2026-10-01, trader-ruled) | Mean total net result per session-day (ASIA, LONDON or NY on one UTC weekday), in bps of notional summed over the trades actually takeable that day. **Counts episodes, not rows:** a trade is taken at the first directional row; later rows are skipped until that trade resolves (target, stop or window end) plus the order app's cooloff, which is how the bridge trades. It shows frequency and day-to-day spread; it has the same sign as net EV per trade for the same population | mean over session-days d of Σ (net resultⱼ) over the takeable trades j in d. Report beside it: takeable trades per session-day, the share of positive session-days, and the worst session-day |
 
 **Rules**
 
 1. **Distances are per signal**, in bps of entry, from the placed levels in `analysis_log.csv` (`Price`, `PlacedTarget*`, `PlacedStop*`). Pool breakeven rates with the Σ formulas above: distance-weighted. Never a simple average of per-signal rates, and never medians.
 2. **Fees follow `scoring.trade_costs`** in `settings.json` (maker/maker, 3 bps round trip at v68) unless another fee case is named.
 3. **Always state the population and the window:** tier × session × resolution, and the window (NY 15 min, LONDON and ASIA 45 min in the band ladder).
+3a. **Net EV per session-day** (added 2026-10-01): CIs bootstrap whole UTC trading days, the house method. Never compute it from row counts: consecutive rows of one signal are one episode (about 12.6 NY rows per episode, adversarial audit row C4). The cooloff value lives in the order app's settings; name the value used.
 4. **Net EV per trade decides; the rates and edges explain it.** The breakeven formulas assume every signal ends at its target or its stop. With timeouts, or when success correlates with distance, an edge in pp can mislead. Net EV per trade cannot.
 5. ⚠ **The "47.76 % breakeven" in the Kelly calibration reads is none of the above.** It is 1 ÷ (1 + 1.75/1.6), from the ATR fallback multipliers, with no fees. Do not compare a success rate against it.
 
