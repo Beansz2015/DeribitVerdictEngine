@@ -192,6 +192,14 @@ Two smaller notes:
 
 ---
 
+## 7b. Rulings of 2026-10-01 (trader)
+
+- **Order:** decisions C-9 and C-10 (the measurement surfaces) come FIRST among the post-holiday reserved work.
+- **Queued with them:** audit rows C14, C15 and C16 (S3 measurement defects that had no queue row).
+- **Row F5 ruled:** session hours become daylight-saving-aware. A spec is owed; the change is reserved, and its burst-run-2 interaction is named in the `trader-tick-queue.md` §2 row.
+
+---
+
 ## 8. What I did not verify
 
 - Any Band A row. The order app's code was not opened; `8232e9e` is the audit's pin, not checked against the app's current master.
