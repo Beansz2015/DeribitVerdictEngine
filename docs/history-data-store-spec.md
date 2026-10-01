@@ -5,6 +5,8 @@
 
 ⛔ **Holiday rule:** the trader is away 2026-10-14 → 2026-11-25. Nothing in this spec is built or switched before 2026-11-25. The collector keeps capturing trades through the holiday as insurance.
 
+> ⭐ **RE-PLANNED 2026-10-01 (trader), superseding the line above for stages 2 and 2b only:** build stage 2 **before** the holiday (ruling `AT-1` (b)), run the 21-month backfill (`HDS-2`) on the temporary cloud instance, and transfer the store to the dev machine **before 2026-10-13**. Stage 1 is complete (this spec plus `HDS-1`–`HDS-4`). The build is one agent alone (Opus 5.5, high), dispatched with the trader's go after the two agents running on 2026-10-01 finish. ⚠ Duration: at the measured ~880 trades/s (§3.5) a day covers ~76M trades, so 21 months fits in a day only if history averages ≤ ~120k trades/day; today runs ~60k/day, and 2024–25 volumes are **not verified**. Plan 1–3 days and start the backfill by ~2026-10-08. Stage 3 (parallel run) starts at the first fetch after the transfer; stage 4 stays reserved and after 2026-11-25.
+
 ---
 
 ## 0. Implementer brief — for the stage-2 build (after 2026-11-25)
