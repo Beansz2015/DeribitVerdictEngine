@@ -230,6 +230,8 @@ Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal 
 > - **Rider 2 — A4 becomes a collector-era research study:** history-store liquidations joined to the per-run OFI values `analysis_log.csv` already logs (`HSR-11`). No live signal.
 > - **Still owed before a build:** this section re-specced for (a). It is a scoring-code change and a rendered-value question (what the LIQUIDATIONS section and the card show once parked), so it is reserved in both classes. Build: one agent, **ask the trader first**. Timing: after 2026-11-25 by default, as a fix off the burst path under `AT-6` (b).
 
+⭐ **RE-SPECCED 2026-10-01 (UTC) for (a) + Rider 1: [`liquidation-park-spec.md`](liquidation-park-spec.md) is the build spec (decisions `LP-1`–`LP-8` queued there). §4.1–§4.2 of this spec below are the superseded 2026-09-16 design, kept for history; §4.3 and §4.4 of this spec are carried into it.**
+
 ### 4.1 Start here — the measurement, because the fix depends on it
 
 The trader ruled **measure first**: capture raw `trades.BTC-PERPETUAL.100ms` messages until a liquidation passes, read-only, on the dev machine.
