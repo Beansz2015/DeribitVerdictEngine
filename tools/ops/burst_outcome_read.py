@@ -26,7 +26,8 @@
 #   * Shadow arms (option (c)): S_add = a B row with ratio >= the session x fifth shadow threshold and AggrVelNet on X;
 #     A_drop = an A row with ratio below it (A_keep otherwise). B_lean = a B row with ratio >= the fixed threshold.
 #   * ATR fifth: the RULED edges (AVR-1), never re-binned. Fifth groups: low = 1-2, mid = 3, high = 4-5.
-#   * Strata: ATR fifth x band x POC era (before / from 2026-09-24 18:46:06 UTC). B is re-weighted to A's stratum mix
+#   * Strata: ATR fifth x band x POC era (before / from 2026-09-24 18:46:06 UTC) x daylight-saving seam era (before / from
+#     the session's seam, SEAM below; ruling AT-2). B is re-weighted to A's stratum mix
 #     over strata where both have rows (rw_run, copied); A rows in strata without B rows are dropped and counted.
 #   * Outcome: MainNetEv (net EV per trade, bps, maker/maker, the session's max window) from the export.
 #   * CI: 95 % percentile bootstrap of whole UTC trading days, fixed seed, 10,000 resamples.
@@ -40,6 +41,8 @@
 #   * Halves: the first floor(D/2) UTC trading days of the analysis population (after the window and every exclusion).
 #   * POC edge sensitivity: BO-H1 and BO-H2 re-run on pre-edge rows only; a labelled result whose sign flips gains
 #     "EDGE-SENSITIVE".
+#   * Seam sensitivity (AT-2): BO-H1 and BO-H2 also re-run on pre-seam rows only (each row against its own session's seam);
+#     a labelled result whose sign flips gains "SEAM-SENSITIVE". Run 2 is wholly post-seam: that run prints n/a.
 #
 # Modes:
 #   --counts-only  population, exclusions, export drops by reason and arm counts; EXITS before any outcome column is
@@ -70,6 +73,10 @@ ASIA_ARMED = datetime(2026, 8, 1, 19, 2, 31)
 V66_EDGE = datetime(2026, 8, 10, 18, 36, 1)
 ATR_STEP = datetime(2026, 8, 20, 0, 0, 0)
 POC_EDGE = datetime(2026, 9, 24, 18, 46, 6)
+# --- Daylight-saving seam, per session (trader ruling AT-2): ASIA and LONDON when Europe leaves summer time, NY when the
+# US does. MECHANISM-class literals under the fixture-literal provenance rule: copied from docs/burst-outcome-read-spec.md
+# section 6.2 (the "Daylight-saving seam" row), not from settings.json. A row is "post" when Timestamp >= its session's seam.
+SEAM = {"ASIA": datetime(2026, 10, 25, 1, 0, 0), "LONDON": datetime(2026, 10, 25, 1, 0, 0), "NY": datetime(2026, 11, 1, 6, 0, 0)}
 
 # --- RULED ATR-fifth edges (AVR-1, 2026-09-26): copied from tools/ops/burst-watch-read.ps1 $Ref (commit b5b4a7d),
 # identical to tools/ops/burst-outcome-power-count.ps1 $Edges. MECHANISM-class literals under the fixture-literal
@@ -483,7 +490,7 @@ def analysis_population(cx, export_rows, book, opt):
         a = arm_fields(cx, sess, side, band, atr, b["TFISignal"], b["AggrVelSignal"], ratio, net is not None, net or 0.0,
                        e["MaxScore"], e["EffectiveLongScore"], e["EffectiveShortScore"])
         a.update({"ts": ts, "s": sess, "band": band, "side": side, "key": key, "day": ts.strftime("%Y-%m-%d"),
-                  "poc": "pre" if ts < POC_EDGE else "post", "era4": era4(ts)})
+                  "poc": "pre" if ts < POC_EDGE else "post", "seam": "pre" if ts < SEAM[sess] else "post", "era4": era4(ts)})
         pop.append(a)
     return pop, drops, n_win, session_mismatch, sig_mismatch
 
@@ -563,7 +570,7 @@ def load_pooled(path):
 
 # ------------------------------------------------------------------ outcome statistics (full mode only)
 def strat_key(r):
-    return (r["fifth"], r["band"], r["poc"])
+    return (r["fifth"], r["band"], r["poc"], r["seam"])
 
 
 def arm_rw(pop_rows, is_a, is_b, strat, name, ctx):
@@ -613,7 +620,7 @@ def holm(results, m):
         x["reject"] = ok
 
 
-def finalize_label(x, sens):
+def finalize_label(x, sens, sens_seam=None):
     lab = x["label"]
     if lab.startswith("CONFIRMED") and not x["reject"]:
         lab = "NOT CONFIRMED: HALVES AGREE, HOLM-ADJUSTED FULL CI INCLUDES 0 (%s)" % ("d > 0" if x["res"]["FULL"][0] > 0 else "d < 0")
@@ -621,6 +628,11 @@ def finalize_label(x, sens):
         sp, fp = sens["res"]["FULL"][0], x["res"]["FULL"][0]
         if sp == sp and fp == fp and (sp > 0) != (fp > 0):
             lab += " EDGE-SENSITIVE"
+    if lab not in ("NOT READABLE", "NO DIFFERENCE SHOWN") and sens_seam is not None:
+        sp, fp = sens_seam["res"]["FULL"][0], x["res"]["FULL"][0]
+        if sp == sp and fp == fp and (sp > 0) != (fp > 0):
+            lab += " SEAM-SENSITIVE"
+    x["seam_pt"] = sens_seam["res"]["FULL"][0] if sens_seam is not None else None
     x["final"] = lab
     return lab
 
@@ -671,15 +683,17 @@ def run_full(cx, pop, opt):
 
     results = {}
     # ---- BO-H1
-    h1 = {}; h1s = {}
+    h1 = {}; h1s = {}; h1q = {}
     for s in SESS_ORDER:
         sr = [r for r in pop if r["s"] == s]
         h1[s] = arm_rw(sr, isA, isB, strat_key, "BO-H1 A - B", "BO-H1 " + s)
         pre = [r for r in sr if r["poc"] == "pre"]
         h1s[s] = arm_rw(pre, isA, isB, strat_key, "BO-H1 pre-edge", "BO-H1 pre " + s) if pre else None
+        pq = [r for r in sr if r["seam"] == "pre"]
+        h1q[s] = arm_rw(pq, isA, isB, strat_key, "BO-H1 pre-seam", "BO-H1 pre-seam " + s) if pq else None
     holm(h1, 3)
     # ---- BO-H2
-    h2 = {}; h2s = {}
+    h2 = {}; h2s = {}; h2q = {}
     in_c = lambda r: r["arm"] == "A" or r["sh"] == "S_add"
     out_c = lambda r: r["arm"] == "B" and r["sh"] != "S_add"
     for s in SESS_ORDER:
@@ -687,26 +701,29 @@ def run_full(cx, pop, opt):
         h2[s] = arm_rw(sr, in_c, out_c, strat_key, "BO-H2 (A+S_add) - (B-S_add)", "BO-H2 " + s)
         pre = [r for r in sr if r["poc"] == "pre"]
         h2s[s] = arm_rw(pre, in_c, out_c, strat_key, "BO-H2 pre-edge", "BO-H2 pre " + s) if pre else None
+        pq = [r for r in sr if r["seam"] == "pre"]
+        h2q[s] = arm_rw(pq, in_c, out_c, strat_key, "BO-H2 pre-seam", "BO-H2 pre-seam " + s) if pq else None
     readable_h2 = {s: x for s, x in h2.items() if x["label"] != "NOT READABLE"}
     holm(readable_h2, len(readable_h2))
     for s, x in h2.items():
         if s not in readable_h2:
             x.update({"p": 1.0, "alpha": float("nan"), "hci": (float("nan"), float("nan")), "reject": False})
 
-    for hid, title, hres, hsens in (("BO-H1", "BO-H1 (primary): A - B, B re-weighted to A's stratum mix, all fifths; Holm over 3 sessions", h1, h1s),
-                                    ("BO-H2", "BO-H2 (secondary, the (c) test): fifths 4-5, (A + S_add) - (B - S_add), re-weighted; Holm over readable sessions", h2, h2s)):
+    for hid, title, hres, hsens, hseam in (("BO-H1", "BO-H1 (primary): A - B, B re-weighted to A's stratum mix, all fifths; Holm over 3 sessions", h1, h1s, h1q),
+                                    ("BO-H2", "BO-H2 (secondary, the (c) test): fifths 4-5, (A + S_add) - (B - S_add), re-weighted; Holm over readable sessions", h2, h2s, h2q)):
         cx.p("### 3.%d %s" % (2 if hid == "BO-H1" else 3, title))
         cx.p()
-        cx.p("| Session | Strata | A rows dropped (stratum without B) | FULL d [95 % CI] (nA/nB) | H1 d (nA/nB) | H2 d (nA/nB) | boot p | Holm alpha | Holm-adjusted FULL CI | Pre-edge FULL d (nA/nB) | Label |")
-        cx.p("|---|---|---|---|---|---|---|---|---|---|---|")
+        cx.p("| Session | Strata | A rows dropped (stratum without B) | FULL d [95 % CI] (nA/nB) | H1 d (nA/nB) | H2 d (nA/nB) | boot p | Holm alpha | Holm-adjusted FULL CI | Pre-edge FULL d (nA/nB) | Pre-seam FULL d (nA/nB) | Label |")
+        cx.p("|---|---|---|---|---|---|---|---|---|---|---|---|")
         for s in SESS_ORDER:
-            x = hres[s]; sv = hsens[s]
-            lab = finalize_label(x, sv)
+            x = hres[s]; sv = hsens[s]; sq = hseam[s]
+            lab = finalize_label(x, sv, sq)
             results[(hid, s)] = x
-            cx.p("| %s | %d | %d | %s | %s | %s | %.4f | %s | [%s, %s] | %s | %s |" % (
+            cx.p("| %s | %d | %d | %s | %s | %s | %.4f | %s | [%s, %s] | %s | %s | %s |" % (
                 s, x["strata"], x["a_dropped"], row_ci(x["res"], "FULL"), row_ci(x["res"], "H1"), row_ci(x["res"], "H2"),
                 x["p"], ("%.4f" % x["alpha"]) if x["alpha"] == x["alpha"] else "n/a", f1(x["hci"][0]), f1(x["hci"][1]),
-                row_ci(sv["res"], "FULL") if sv else "n/a (no pre-edge rows)", lab))
+                row_ci(sv["res"], "FULL") if sv else "n/a (no pre-edge rows)",
+                row_ci(sq["res"], "FULL") if sq else "n/a (no pre-seam rows)", lab))
         cx.p()
 
     # ---- BO-H3 and fifth cells: descriptive, never labelled
@@ -804,6 +821,11 @@ def run(opt):
         s, sum(1 for r in pop if r["s"] == s and r["poc"] == "pre" and r["arm"] == "A"), sum(1 for r in pop if r["s"] == s and r["poc"] == "pre" and r["arm"] == "B"),
         sum(1 for r in pop if r["s"] == s and r["poc"] == "post" and r["arm"] == "A"), sum(1 for r in pop if r["s"] == s and r["poc"] == "post" and r["arm"] == "B"))
         for s in SESS_ORDER))
+    cx.p("- Daylight-saving seam era (analysis population; ASIA/LONDON seam %s, NY seam %s): " % (SEAM["ASIA"].strftime(FMT), SEAM["NY"].strftime(FMT)) + "  ".join(
+        "%s pre A/B %d/%d post A/B %d/%d" % (
+            s, sum(1 for r in pop if r["s"] == s and r["seam"] == "pre" and r["arm"] == "A"), sum(1 for r in pop if r["s"] == s and r["seam"] == "pre" and r["arm"] == "B"),
+            sum(1 for r in pop if r["s"] == s and r["seam"] == "post" and r["arm"] == "A"), sum(1 for r in pop if r["s"] == s and r["seam"] == "post" and r["arm"] == "B"))
+        for s in SESS_ORDER))
     info = {"pop": pop, "ref": ref, "refx": x, "drops": drops, "why": why, "extra": len(extra), "arm_diff": arm_diff}
     if opt.counts_only:
         cx.p()
@@ -817,10 +839,15 @@ def run(opt):
 BOOK_HDR = BOOK_NEED + ["InstanceId"]
 
 
-def st_build(tmp, null_case, seed):
+NDAYS = 80   # weekdays from 2026-08-03 to 2026-11-20: spans the ASIA/LONDON seam (2026-10-25) and the NY seam (2026-11-01)
+
+
+def st_build(tmp, null_case, seed, flip=False):
     """Synthetic fetch folder + export. 60 weekdays from 2026-08-03, three sessions; per session-day 5 A rows, each with
     two B rows of the same stratum (fifth, band, POC era), plus C, O and excluded rows. Effect case: A EV = +5 + noise,
-    B EV = noise. Null case: each B row carries its A row's EV, so the re-weighted A - B is exactly 0 in every resample."""
+    B EV = noise. Null case: each B row carries its A row's EV, so the re-weighted A - B is exactly 0 in every resample.
+    Flip case (AT-2): A EV = -4 + noise before the row's session seam and +40 + noise from it, B EV = noise, so the pooled
+    A - B is positive and the pre-seam-only A - B is negative: "SEAM-SENSITIVE" must appear on the BO-H1 label."""
     rng = random.Random(seed)
     fetch = os.path.join(tmp, "fetch"); os.makedirs(fetch)
     mids = {"ASIA": [25.0, 40.0, 60.0, 75.0, 95.0], "LONDON": [25.0, 40.0, 60.0, 80.0, 100.0], "NY": [15.0, 25.0, 37.0, 50.0, 70.0]}
@@ -831,7 +858,7 @@ def st_build(tmp, null_case, seed):
     book_rows, export_rows, expect = [], [], {s: {"A": 0, "B": 0, "C": 0, "O": 0, "S_add": 0} for s in SESS_ORDER}
     d = datetime(2026, 8, 3)
     days = []
-    while len(days) < 60:
+    while len(days) < NDAYS:
         if d.weekday() < 5: days.append(d)
         d += timedelta(days=1)
     price = 60000.0
@@ -865,7 +892,9 @@ def st_build(tmp, null_case, seed):
                 tfi = "BUY PRESSURE" if side == "LONG" else "SELL PRESSURE"
                 burst = "BURST_BUY" if side == "LONG" else "BURST_SELL"
                 sg = 1 if side == "LONG" else -1
-                ev_a = 5.0 + rng.gauss(0, 10) if not null_case else rng.gauss(0, 10)
+                if flip: mu_a = -4.0 if t < SEAM[s] else 40.0
+                else: mu_a = 0.0 if null_case else 5.0
+                ev_a = mu_a + rng.gauss(0, 10)
                 b, e = mk(nts(), s, side, band, fifth, tfi, burst, 9.5, sg * 100.0)
                 e["MainNetEv"] = "%.6f" % ev_a; e["MainOutcome"] = "1" if ev_a > 0 else "2"
                 book_rows.append(b); export_rows.append(e)
@@ -932,10 +961,11 @@ def selftest(root, resamples):
     def check(cond, msg):
         print(("PASS  " if cond else "FAIL  ") + msg)
         if not cond: fails.append(msg)
-    for case, null_case in (("effect (A = +5 bps, B = 0, noise sd 10)", False), ("null (B rows carry their A row's EV)", True)):
+    for case, null_case, flip in (("effect (A = +5 bps, B = 0, noise sd 10)", False, False), ("null (B rows carry their A row's EV)", True, False),
+                                  ("seam flip (A = -4 bps before the session seam, +40 from it, B = 0)", False, True)):
         tmp = tempfile.mkdtemp(prefix="burst_selftest_")
         try:
-            fetch, ex, ex_sig, expect = st_build(tmp, null_case, 20260929)
+            fetch, ex, ex_sig, expect = st_build(tmp, null_case, 20260929, flip)
             base = dict(root=root, export=ex, fetch=fetch, pooled=None, cut_before=None, from_=None, resamples=resamples,
                         seed=20260928, selftest_quiet=True)
             print("\n==== SELFTEST case: %s ====" % case)
@@ -954,7 +984,7 @@ def selftest(root, resamples):
                 want = {k: expect[s][k] for k in ("A", "B", "C", "O", "S_add")}
                 check(got == want, "%s arm counts %s == constructed %s" % (s, got, want))
             check(len(info["drops"].get("not in the fetch books (pre-collector or pooled-only row)", [])) == 2, "2 export rows missing from the books are dropped and counted")
-            check(len(info["drops"].get("AggrVelBurstRatio empty", [])) == 3 * 60, "180 ratio-empty rows excluded and counted")
+            check(len(info["drops"].get("AggrVelBurstRatio empty", [])) == 3 * NDAYS, "%d ratio-empty rows excluded and counted" % (3 * NDAYS))
             check(len(info["drops"].get("ASIA before arming 2026-08-01 19:02:31", [])) == expect["ASIA_unarmed_export_rows"] == info["refx"]["asiaUnarmed"],
                   "3 ASIA pre-arming rows excluded and counted, in the export and in the power-count reference")
             check(info["extra"] == 0 and info["arm_diff"] == 0, "analysis rows are a subset of the power-count rows with identical arms")
@@ -968,14 +998,31 @@ def selftest(root, resamples):
                     cx, info, res = run(o)
                 finally:
                     sys.stdout = so
+            # AT-2 seam checks. Failing inputs: (a) two rows identical but for the seam must key to different strata (fails if the
+            # seam term is dropped from strat_key); (b) the analysis population must hold rows on both sides of EVERY session's
+            # seam, and the era printout must carry the seam line (fails if the seam field or the printout is missing).
+            for s in SESS_ORDER:
+                sp_ = {r["seam"] for r in info["pop"] if r["s"] == s}
+                check(sp_ == {"pre", "post"}, "%s analysis population holds pre-seam and post-seam rows (got %s)" % (s, sorted(sp_)))
+                check(all((r["seam"] == "pre") == (r["ts"] < SEAM[s]) for r in info["pop"] if r["s"] == s), "%s seam era is Timestamp < that session's seam" % s)
+            r0 = info["pop"][0]
+            check(strat_key(dict(r0, seam="pre")) != strat_key(dict(r0, seam="post")), "strat_key separates the seam eras (the fourth stratum dimension)")
+            check(any(ln.startswith("- Daylight-saving seam era") for ln in cx.out), "seam era counts are in the era printout")
             for s in SESS_ORDER:
                 x = res[("BO-H1", s)]
                 pt, lo, hi = x["res"]["FULL"][:3]
                 print("      %s BO-H1 FULL d = %s  Holm CI [%s, %s]  label: %s" % (s, ci(pt, lo, hi), f1(x["hci"][0]), f1(x["hci"][1]), x["final"]))
-                if not null_case:
+                if flip:
+                    # the sensitivity run must exist, must have the opposite sign, and the label must say so
+                    sqv = x.get("seam_pt")
+                    check(sqv is not None and sqv < 0 < pt, "%s BO-H1 pooled d > 0 and pre-seam-only d < 0 (pooled %+.2f, pre-seam %s)" % (s, pt, sqv))
+                    check(x["final"].endswith("SEAM-SENSITIVE"), "%s BO-H1 label carries SEAM-SENSITIVE (got %r)" % (s, x["final"]))
+                elif not null_case:
+                    check("SEAM-SENSITIVE" not in x["final"], "%s BO-H1 effect case is not labelled SEAM-SENSITIVE (got %r)" % (s, x["final"]))
                     check(lo > 0 and 3.0 <= pt <= 7.0, "%s BO-H1 A - B CI excludes 0 and the point is near +5" % s)
                     check(x["final"].startswith("CONFIRMED (d > 0)"), "%s BO-H1 label is CONFIRMED (d > 0)" % s)
                 else:
+                    check("SEAM-SENSITIVE" not in x["final"], "%s BO-H1 null case is not labelled SEAM-SENSITIVE" % s)
                     check(abs(pt) < 1e-9 and abs(lo) < 1e-9 and abs(hi) < 1e-9, "%s BO-H1 A - B is exactly 0 in every resample" % s)
                     check(x["final"] == "NO DIFFERENCE SHOWN", "%s BO-H1 label is NO DIFFERENCE SHOWN" % s)
             check(any(ln.startswith("### 3.3 BO-H2") for ln in cx.out), "BO-H2 table printed")
