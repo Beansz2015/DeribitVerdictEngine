@@ -284,6 +284,8 @@ Under `LP-3` (a) nothing renders differently. Under `LP-3` (b) four sites gain a
 
 ## 9. Decisions
 
+> ✅ **RULED 2026-10-01 (UTC), trader: `LP-1`–`LP-8` all AS READ.** **Build timing: after 2026-11-25**, as a fix off the burst path under `AT-6` (b). It changes no live output, so it gains nothing during the holiday; the history-store build has the pre-holiday agent slot. One agent, ask the trader before dispatch.
+
 **Reserved marks:** ⛔ = reserved under `CLAUDE.md` (scoring code, rendered value, settings). Not marked = auto-proceed class; the implementer may take the read and log it.
 
 **The three-step test** (`CLAUDE.md`, "what cheaper means"): (1) is there an option that records more, guarantees more, or is more self-describing than the read? (2) if yes and it is not picked because "mine is adequate" → reserve; (3) if it is not picked because it is mechanically wrong, uninterpretable or forbidden → take the read and name which.
