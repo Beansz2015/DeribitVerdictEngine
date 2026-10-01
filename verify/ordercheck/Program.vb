@@ -667,6 +667,23 @@ Module Program
         A93d_RequestTimeoutIsValidatedAgainstTheRange()
         A93e_HttpClientTimeoutIsInfiniteAfterTypeInit()
 
+        ' [A94 — history data store, stage 2, docs/history-data-store-spec.md §5] Paging by seq with
+        ' same-ms overlaps (a), has_more splits (b), the settle margin (c), kill-and-resume at every
+        ' point (d), re-run no-op (e), the 11-column file through the shared readers (f, H-6),
+        ' pacing/backoff and never skipping a range (g), the comparison (h), the stage-4 pass rule
+        ' (i), a torn row (j), a run aimed at a box store (k).
+        A94Guard("A94a", AddressOf A94a_PagingKeepsEachSeqOnceAcrossSameMsPageOverlaps)
+        A94Guard("A94b", AddressOf A94b_HasMoreSplitsAndAnUnsplittablePageFailsTheDay)
+        A94Guard("A94c", AddressOf A94c_SettleMarginExcludesDaysEndingInsideTheMargin)
+        A94Guard("A94d", AddressOf A94d_KillAtAnyPointThenResumeIsByteIdenticalNoGapNoDuplicate)
+        A94Guard("A94e", AddressOf A94e_RerunOfCompletedDaysTouchesNothing)
+        A94Guard("A94f", AddressOf A94f_ElevenColumnFileReadsThroughTheSharedParseAndTheReplayLoader)
+        A94Guard("A94g", AddressOf A94g_FailingRangeStopsTheRunWithTheRuledBackoff)
+        A94Guard("A94h", AddressOf A94h_ComparePassesBoxHolesAndFailsEveryBoxOnlyFact)
+        A94Guard("A94i", AddressOf A94i_PassRuleNeedsEnoughPassesOverTheSpanAndNoFail)
+        A94Guard("A94j", AddressOf A94j_TornRowStopsTheMergeAndIsReportedByTheDeepStatus)
+        A94Guard("A94k", AddressOf A94k_ARunAimedAtABoxStoreRefusesOnTheHeader)
+
         ' [A57 — thin-trade-window skip gate, docs/thin-trade-window-skip-gate-proposal.md §6]
         ' Every guard on the trade path tested Count = 0; nothing tested for a THIN list. A57c
         ' is the mutation proof: revert ScoringEngine.MinTradesForScoring to a hardcoded 50 and
@@ -19109,6 +19126,791 @@ Module Program
         Check("A87c §6 (a) renders DIRECTIONAL, LEAN NO TRADE and TIE as three labelled columns, with the not-traded caption",
               hdr AndAlso rowOk AndAlso flowOk AndAlso md.Contains("they were NOT traded"),
               String.Format("hdr={0} confirmed='{1}' flow='{2}'", hdr, confirmedLine, flowLine))
+    End Sub
+
+    ' =======================================================================
+    ' A94 — history data store, stage 2 (docs/history-data-store-spec.md §5). A fake history host
+    ' with the MEASURED behaviour (spec §3.2, docs/history-host-and-raw-channel-read-2026-09-28.md
+    ' §5a): a seq range is WIDENED to whole milliseconds, trades inside one millisecond come back in
+    ' no particular order (reversed here, so the time anchor returns the HIGHEST seq of its group),
+    ' and a page holds at most HistoricalStore.TradesPerPage trades and says has_more when cut.
+    ' Each fixture names the input that makes it fail; each was mutation-run
+    ' (docs/history-data-store-build-spec-back.md §4). Every literal below is MECHANISM unless it
+    ' says otherwise: dates, seqs, prices and group sizes only shape the tape. The ruled numbers
+    ' (settle margin, page cap, backoff, retries, pacing) are read from their Public Consts.
+    ' =======================================================================
+
+    Private NotInheritable Class A94Kill
+        Inherits Exception
+    End Class
+
+    Private NotInheritable Class A94FakeHost
+        Public ReadOnly Tape As List(Of HistoryTrade)
+        Public Requests As Integer
+        Public KillAt As Integer = -1
+        Public FailWhen As Func(Of Integer, String, Boolean)
+        ''' <summary>How many times each seq was served by a SEQ query (anchors excluded).</summary>
+        Public ReadOnly Served As New Dictionary(Of Long, Integer)()
+        Public ReadOnly Queries As New List(Of String)()
+
+        Public Sub New(tape As List(Of HistoryTrade))
+            Me.Tape = tape
+        End Sub
+
+        Public Function GetJsonAsync(q As String) As Task(Of String)
+            Requests += 1
+            Queries.Add(q)
+            If Requests = KillAt Then Throw New A94Kill()
+            If FailWhen IsNot Nothing AndAlso FailWhen(Requests, q) Then Throw New HistoryHostException("fake transient failure")
+            Dim qs As Dictionary(Of String, String) = A94Query(q)
+            Dim cap As Integer = CInt(qs("count"))
+            Dim sel As New List(Of HistoryTrade)()
+            Dim isSeq As Boolean = False
+            If q.StartsWith("get_last_trades_by_instrument_and_time?", StringComparison.Ordinal) Then
+                Dim s As Long = CLng(qs("start_timestamp"))
+                Dim e As Long = CLng(qs("end_timestamp"))
+                For Each t In Tape
+                    If t.Rec.Timestamp >= s AndAlso t.Rec.Timestamp <= e Then sel.Add(t)
+                Next
+            ElseIf q.StartsWith("get_last_trades_by_instrument?", StringComparison.Ordinal) Then
+                isSeq = True
+                Dim a As Long = CLng(qs("start_seq"))
+                Dim b As Long = CLng(qs("end_seq"))
+                Dim lo As Integer = -1
+                Dim hi As Integer = -1
+                For i As Integer = 0 To Tape.Count - 1
+                    Dim sq As Long = Tape(i).Rec.TradeSeq
+                    If sq >= a AndAlso sq <= b Then
+                        If lo < 0 Then lo = i
+                        hi = i
+                    End If
+                Next
+                If lo >= 0 Then
+                    Dim tsLo As Long = Tape(lo).Rec.Timestamp
+                    Dim tsHi As Long = Tape(hi).Rec.Timestamp
+                    While lo > 0 AndAlso Tape(lo - 1).Rec.Timestamp = tsLo
+                        lo -= 1
+                    End While
+                    While hi < Tape.Count - 1 AndAlso Tape(hi + 1).Rec.Timestamp = tsHi
+                        hi += 1
+                    End While
+                    For i As Integer = lo To hi
+                        sel.Add(Tape(i))
+                    Next
+                End If
+            Else
+                Throw New InvalidOperationException("unexpected query " & q)
+            End If
+            sel.Sort(Function(x, y) If(x.Rec.Timestamp <> y.Rec.Timestamp,
+                                       x.Rec.Timestamp.CompareTo(y.Rec.Timestamp),
+                                       y.Rec.TradeSeq.CompareTo(x.Rec.TradeSeq)))
+            Dim hasMore As Boolean = sel.Count > cap
+            If hasMore Then sel = sel.GetRange(0, cap)
+            If isSeq Then
+                For Each t In sel
+                    Dim c As Integer = 0
+                    Served.TryGetValue(t.Rec.TradeSeq, c)
+                    Served(t.Rec.TradeSeq) = c + 1
+                Next
+            End If
+            Return Task.FromResult(A94Json(sel, hasMore))
+        End Function
+    End Class
+
+    ''' <summary>Runs one A94 fixture; an unexpected exception (a mutation that breaks a write
+    ''' path, say) becomes a FAIL line instead of ending the harness.</summary>
+    Private Sub A94Guard(id As String, fixture As Action)
+        Try
+            fixture()
+        Catch ex As Exception
+            Check(id & " fixture ran to completion", False, ex.GetType().Name & ": " & ex.Message)
+        End Try
+    End Sub
+
+    Private Function A94Query(q As String) As Dictionary(Of String, String)
+        Dim d As New Dictionary(Of String, String)(StringComparer.Ordinal)
+        For Each kv In q.Substring(q.IndexOf("?"c) + 1).Split("&"c)
+            Dim p As String() = kv.Split("="c)
+            d(p(0)) = p(1)
+        Next
+        Return d
+    End Function
+
+    Private Function A94Num(v As Double) As String
+        Return v.ToString("R", CultureInfo.InvariantCulture)
+    End Function
+
+    Private Function A94Json(sel As List(Of HistoryTrade), hasMore As Boolean) As String
+        Dim sb As New Text.StringBuilder()
+        sb.Append("{""jsonrpc"":""2.0"",""result"":{""trades"":[")
+        For i As Integer = 0 To sel.Count - 1
+            Dim t As HistoryTrade = sel(i)
+            Dim r As TradeRecord = t.Rec
+            If i > 0 Then sb.Append(","c)
+            sb.Append("{""trade_seq"":").Append(r.TradeSeq.ToString(CultureInfo.InvariantCulture))
+            sb.Append(",""trade_id"":""").Append(r.TradeId).Append(""""c)
+            sb.Append(",""timestamp"":").Append(r.Timestamp.ToString(CultureInfo.InvariantCulture))
+            If t.Extras.TickDirection.HasValue Then sb.Append(",""tick_direction"":").Append(t.Extras.TickDirection.Value.ToString(CultureInfo.InvariantCulture))
+            sb.Append(",""price"":").Append(A94Num(r.Price))
+            If t.Extras.MarkPrice.HasValue Then sb.Append(",""mark_price"":").Append(A94Num(t.Extras.MarkPrice.Value))
+            If t.Extras.IndexPrice.HasValue Then sb.Append(",""index_price"":").Append(A94Num(t.Extras.IndexPrice.Value))
+            sb.Append(",""instrument_name"":""BTC-PERPETUAL"",""direction"":""").Append(r.Direction).Append(""""c)
+            If t.Extras.Contracts.HasValue Then sb.Append(",""contracts"":").Append(A94Num(t.Extras.Contracts.Value))
+            sb.Append(",""amount"":").Append(A94Num(r.Amount))
+            If r.Liquidation <> "none" Then sb.Append(",""liquidation"":""").Append(r.Liquidation).Append(""""c)
+            sb.Append("}"c)
+        Next
+        sb.Append("],""has_more"":").Append(If(hasMore, "true", "false")).Append("}}")
+        Return sb.ToString()
+    End Function
+
+    Private Function A94Trade(seq As Long, ts As Long) As HistoryTrade
+        Dim px As Double = 60000.0 + (seq Mod 1000L) * 0.5
+        Dim amt As Double = 10.0 * (1L + seq Mod 7L)
+        Dim x As New HistoryExtras()
+        x.MarkPrice = px + 0.13
+        x.IndexPrice = px - 1.27
+        x.TickDirection = CInt(seq Mod 4L)
+        ' Every fifth trade carries no `contracts` — the 2020-era shape (validation read §5a, D).
+        If seq Mod 5L <> 0L Then x.Contracts = amt / 10.0
+        Return New HistoryTrade With {
+            .Rec = New TradeRecord With {
+                .Timestamp = ts, .Price = px, .Amount = amt,
+                .Direction = If(seq Mod 2L = 0L, "buy", "sell"),
+                .Liquidation = If(seq Mod 997L = 0L, "T", "none"),
+                .TradeId = (seq + 1000000000L).ToString(CultureInfo.InvariantCulture),
+                .TradeSeq = seq},
+            .Extras = x}
+    End Function
+
+    ''' <summary>A tape from fromMs to toMs: one millisecond group every groupStepMs, group sizes
+    ''' cycling through <paramref name="sizes"/>, seqs contiguous from firstSeq.</summary>
+    Private Function A94Tape(fromMs As Long, toMs As Long, sizes As Integer(), groupStepMs As Long, firstSeq As Long) As List(Of HistoryTrade)
+        Dim tape As New List(Of HistoryTrade)()
+        Dim seq As Long = firstSeq
+        Dim ts As Long = fromMs
+        Dim k As Integer = 0
+        While ts < toMs
+            For j As Integer = 1 To sizes(k Mod sizes.Length)
+                tape.Add(A94Trade(seq, ts))
+                seq += 1L
+            Next
+            ts += groupStepMs
+            k += 1
+        End While
+        Return tape
+    End Function
+
+    Private Function A94Day(y As Integer, m As Integer, d As Integer) As DateTime
+        Return New DateTime(y, m, d, 0, 0, 0, DateTimeKind.Utc)
+    End Function
+
+    Private Function A94Store(dir As String, host As A94FakeHost, nowMs As Long,
+                              Optional hook As Action(Of String) = Nothing,
+                              Optional delays As List(Of Integer) = Nothing) As HistoryStore
+        Dim delayFn As Func(Of Integer, Task) = Function(ms As Integer)
+                                                    If delays IsNot Nothing Then delays.Add(ms)
+                                                    Return Task.CompletedTask
+                                                End Function
+        Return New HistoryStore(dir, AddressOf host.GetJsonAsync, delayFn, Function() nowMs, hook,
+                                Sub(s As String)
+                                End Sub)
+    End Function
+
+    Private Function A94Run(dir As String, host As A94FakeHost, fromDay As DateTime, toExcl As DateTime, nowMs As Long,
+                            Optional hook As Action(Of String) = Nothing,
+                            Optional delays As List(Of Integer) = Nothing) As HistoryRunResult
+        Return A94Store(dir, host, nowMs, hook, delays).RunAsync(fromDay, toExcl).GetAwaiter().GetResult()
+    End Function
+
+    ''' <summary>The trade_seqs of a dev-store month file in file order; -1 for a row that does not
+    ''' parse as an eleven-column history row.</summary>
+    Private Function A94FileSeqs(dir As String, y As Integer, m As Integer) As List(Of Long)
+        Dim seqs As New List(Of Long)()
+        Dim p As String = TradeStoreWriter.TradeFileFor(dir, y, m)
+        If Not File.Exists(p) Then Return seqs
+        Dim lines As String() = File.ReadAllLines(p)
+        For i As Integer = 1 To lines.Length - 1
+            Dim rec As TradeRecord = Nothing
+            Dim x As HistoryExtras = Nothing
+            seqs.Add(If(HistoryStore.TryParseHistoryRow(lines(i), rec, x), rec.TradeSeq, -1L))
+        Next
+        Return seqs
+    End Function
+
+    ''' <summary>The checkpoint entry for a day, or a placeholder with Status "(absent)" — so a
+    ''' mutation that stops a day reaching the checkpoint FAILS the check instead of crashing
+    ''' the harness.</summary>
+    Private Function A94Entry(dir As String, dayKey As String) As HistoryDayEntry
+        Dim en As HistoryDayEntry = Nothing
+        If HistoryStore.LoadCheckpoint(dir).TryGetValue(dayKey, en) Then Return en
+        Return New HistoryDayEntry With {.Status = "(absent)"}
+    End Function
+
+    Private Function A94DaySeqs(tape As List(Of HistoryTrade), day As DateTime) As List(Of Long)
+        Dim d0 As Long = HistoryStore.DayStartMs(day)
+        Return tape.Where(Function(t) t.Rec.Timestamp >= d0 AndAlso t.Rec.Timestamp < d0 + HistoryStore.DayMs) _
+                   .Select(Function(t) t.Rec.TradeSeq).ToList()
+    End Function
+
+    ' -- A94a: paging by seq keeps every trade of a day once, across overlapping widened pages.
+    ' The input that makes it fail: millisecond groups of 50 trades, so page edges fall inside a
+    ' group and the host serves the same seqs on two pages (asserted: served >= 2). Keyed on the
+    ' millisecond instead of trade_seq (the store's 2026-08 defect class), the siblings collapse.
+    Private Sub A94a_PagingKeepsEachSeqOnceAcrossSameMsPageOverlaps()
+        Dim dir As String = A48TempStore("94a")
+        Try
+            Dim day As DateTime = A94Day(2025, 6, 2)
+            Dim d0 As Long = HistoryStore.DayStartMs(day)
+            Dim tape = A94Tape(d0 - 3600000L, d0 + HistoryStore.DayMs + 3600000L, {1, 3, 50, 2, 7, 1, 50, 4}, 60000L, 250000000L)
+            Dim host As New A94FakeHost(tape)
+            Dim r = A94Run(dir, host, day, day.AddDays(1), d0 + 3L * HistoryStore.DayMs)
+            Dim want = A94DaySeqs(tape, day)
+            Dim got = A94FileSeqs(dir, 2025, 6)
+            Dim maxServed As Integer = If(host.Served.Count > 0, host.Served.Values.Max(), 0)
+            Check("A94a history paging — same-ms groups straddling page edges are served twice and stored once: the day file holds every seq of the day, once, in seq order",
+                  r.ExitCode = HistoryStore.ExitOk AndAlso r.DaysOk = 1 AndAlso maxServed >= 2 AndAlso got.SequenceEqual(want),
+                  String.Format("exit={0} ok={1} maxServed={2} want={3} got={4} distinct={5}",
+                                r.ExitCode, r.DaysOk, maxServed, want.Count, got.Count, got.Distinct().Count()))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A94b: a page with has_more is split, never trusted; one millisecond larger than a page
+    ' fails the day instead of storing a truncated group.
+    ' The input that makes part 1 fail: groups of 300 in one millisecond, so a widened 800-seq page
+    ' exceeds the page cap and comes back cut (has_more). Ignoring has_more, the cut trades are
+    ' lost on the page and the day needs a re-request it should never need.
+    ' The input that makes part 2 fail: one millisecond of 1,200 trades, more than a page — a
+    ' single-seq request still says has_more. Accepting it stores a truncated group.
+    Private Sub A94b_HasMoreSplitsAndAnUnsplittablePageFailsTheDay()
+        Dim dir As String = A48TempStore("94b")
+        Dim dir2 As String = A48TempStore("94b2")
+        Try
+            Dim day As DateTime = A94Day(2025, 6, 3)
+            Dim d0 As Long = HistoryStore.DayStartMs(day)
+            Dim tape = A94Tape(d0 - 3600000L, d0 + HistoryStore.DayMs + 3600000L, {300}, 600000L, 251000000L)
+            Dim host As New A94FakeHost(tape)
+            Dim r = A94Run(dir, host, day, day.AddDays(1), d0 + 3L * HistoryStore.DayMs)
+            Dim en As HistoryDayEntry = A94Entry(dir, "2025-06-03")
+            Dim want = A94DaySeqs(tape, day)
+            Dim got = A94FileSeqs(dir, 2025, 6)
+            Check("A94b history has_more — a cut page (300-trade ms groups) is split and re-requested: splits > 0, no missing run needed recovering, every seq stored once",
+                  r.DaysOk = 1 AndAlso en.HasMoreSplits > 0 AndAlso en.Detail = "" AndAlso got.SequenceEqual(want),
+                  String.Format("ok={0} splits={1} detail='{2}' want={3} got={4}", r.DaysOk, en.HasMoreSplits, en.Detail, want.Count, got.Count))
+
+            ' Part 2: a single millisecond (mid-day) holding more than a page. SHIPPED BEHAVIOUR:
+            ' the group size is derived from HistoricalStore.TradesPerPage (cap + 200).
+            Dim mid As Long = d0 + HistoryStore.DayMs \ 2L
+            Dim bigGroup As Integer = HistoricalStore.TradesPerPage + 200
+            Dim tape2 As New List(Of HistoryTrade)()
+            Dim seq As Long = 252000000L
+            Dim ts2 As Long = d0 - 3600000L
+            While ts2 < d0 + HistoryStore.DayMs + 3600000L
+                For j As Integer = 1 To If(ts2 = mid, bigGroup, 2)
+                    tape2.Add(A94Trade(seq, ts2))
+                    seq += 1L
+                Next
+                ts2 += 60000L
+            End While
+            Dim r2 = A94Run(dir2, New A94FakeHost(tape2), day, day.AddDays(1), d0 + 3L * HistoryStore.DayMs)
+            Dim en2 As HistoryDayEntry = A94Entry(dir2, "2025-06-03")
+            Check(String.Format("A94b history has_more — one millisecond of {0} trades (more than a {1}-trade page) fails the day: FAILED, nothing written, run exit {2}",
+                                bigGroup, HistoricalStore.TradesPerPage, HistoryStore.ExitDaysIncomplete),
+                  en2.Status = HistoryStore.StatusFailed AndAlso Not File.Exists(TradeStoreWriter.TradeFileFor(dir2, 2025, 6)) AndAlso
+                  r2.ExitCode = HistoryStore.ExitDaysIncomplete AndAlso en2.Detail.Contains("cannot be split"),
+                  String.Format("status={0} file={1} exit={2} detail='{3}'", en2.Status,
+                                File.Exists(TradeStoreWriter.TradeFileFor(dir2, 2025, 6)), r2.ExitCode, en2.Detail))
+        Finally
+            A48Cleanup(dir)
+            A48Cleanup(dir2)
+        End Try
+    End Sub
+
+    ' -- A94c: the settle margin. SHIPPED BEHAVIOUR: the margin is read from
+    ' HistoryStore.SettleMarginMs, never restated. The input that makes it fail: a day whose end
+    ' is 23 h before now — inside the margin. The planner must not offer it, FetchDayAsync must
+    ' refuse it if asked directly (two guards, each mutated alone), and a run over a range that
+    ' reaches now writes no row at or after now − margin (handle H-4).
+    Private Sub A94c_SettleMarginExcludesDaysEndingInsideTheMargin()
+        Dim dir As String = A48TempStore("94c")
+        Try
+            Dim nowMs As Long = HistoryStore.DayStartMs(A94Day(2025, 7, 10)) + 23L * 3600000L   ' 2025-07-10 23:00Z
+            Dim cutoff As Long = nowMs - HistoryStore.SettleMarginMs
+            Dim ac, uns As Integer
+            Dim plan = HistoryStore.PlanDays(A94Day(2025, 7, 7), A94Day(2025, 7, 11), cutoff,
+                                             New Dictionary(Of String, HistoryDayEntry)(), ac, uns)
+            Dim planKeys As String = String.Join(" ", plan.Select(Function(d) HistoryStore.DayKey(d)))
+            ' Day 07-09 ends 07-10 00:00, which is 23 h before now: inside the margin.
+            Check("A94c settle margin — planner: newest first, only days ending at or before now − SettleMarginMs (07-09 ends 23 h before now and is held back)",
+                  planKeys = "2025-07-08 2025-07-07" AndAlso uns = 2, "plan='" & planKeys & "' unsettled=" & uns)
+
+            ' Order: never-fetched days newest first, then GAP/FAILED days. The input that makes it
+            ' fail: a GAP day newer than a never-fetched one — a chunked run would retry it first.
+            Dim cpOrder As New Dictionary(Of String, HistoryDayEntry)(StringComparer.Ordinal) From {
+                {"2025-07-08", New HistoryDayEntry With {.Day = A94Day(2025, 7, 8), .Status = HistoryStore.StatusGap}},
+                {"2025-07-06", New HistoryDayEntry With {.Day = A94Day(2025, 7, 6), .Status = HistoryStore.StatusOk}},
+                {"2025-07-05", New HistoryDayEntry With {.Day = A94Day(2025, 7, 5), .Status = HistoryStore.StatusFailed}}}
+            Dim planOrder = HistoryStore.PlanDays(A94Day(2025, 7, 4), A94Day(2025, 7, 9), cutoff, cpOrder, ac, uns)
+            Dim orderKeys As String = String.Join(" ", planOrder.Select(Function(d) HistoryStore.DayKey(d)))
+            Check("A94c planner order — never-fetched days newest first, then GAP/FAILED days newest first; OK days skipped",
+                  orderKeys = "2025-07-07 2025-07-04 2025-07-08 2025-07-05" AndAlso ac = 1, "plan='" & orderKeys & "' alreadyComplete=" & ac)
+
+            ' Boundary: a day ending EXACTLY SettleMarginMs before now is settled.
+            Dim nowEdge As Long = HistoryStore.DayStartMs(A94Day(2025, 7, 10)) + HistoryStore.SettleMarginMs
+            Dim planEdge = HistoryStore.PlanDays(A94Day(2025, 7, 9), A94Day(2025, 7, 10), nowEdge - HistoryStore.SettleMarginMs,
+                                                 Nothing, ac, uns)
+            Check("A94c settle margin — a day ending exactly SettleMarginMs before now is fetched",
+                  planEdge.Count = 1, "planned=" & planEdge.Count)
+
+            Dim tape = A94Tape(HistoryStore.DayStartMs(A94Day(2025, 7, 6)), nowMs, {1, 2}, 60000L, 253000000L)
+            Dim hs = A94Store(dir, New A94FakeHost(tape), nowMs)
+            Dim direct = hs.FetchDayAsync(A94Day(2025, 7, 9), cutoff).GetAwaiter().GetResult()
+            ' Requests = 0: the day-level guard refuses BEFORE asking the host. (A third, per-row
+            ' guard after paging would also stop the write; without Requests = 0 this check could
+            ' not tell the two apart — mutation M4 in the spec-back.)
+            Check("A94c settle margin — FetchDayAsync refuses a day ending after the cutoff (second guard) before any request: FAILED, no trades, 0 requests",
+                  direct.Entry.Status = HistoryStore.StatusFailed AndAlso direct.Trades.Count = 0 AndAlso direct.Entry.Requests = 0,
+                  "status=" & direct.Entry.Status & " trades=" & direct.Trades.Count & " requests=" & direct.Entry.Requests)
+
+            Dim r = A94Run(dir, New A94FakeHost(tape), A94Day(2025, 7, 7), A94Day(2025, 7, 11), nowMs)
+            Dim maxTs As Long = Long.MinValue
+            Dim lines As String() = File.ReadAllLines(TradeStoreWriter.TradeFileFor(dir, 2025, 7))
+            For i As Integer = 1 To lines.Length - 1
+                Dim rec As TradeRecord = Nothing
+                Dim x As HistoryExtras = Nothing
+                If HistoryStore.TryParseHistoryRow(lines(i), rec, x) Then maxTs = Math.Max(maxTs, rec.Timestamp)
+            Next
+            Dim cp = HistoryStore.LoadCheckpoint(dir)
+            Check("A94c settle margin (H-4) — a run over a range reaching now writes no row at or after now − SettleMarginMs; only the two settled days are checkpointed",
+                  maxTs < cutoff AndAlso cp.Count = 2 AndAlso r.Unsettled = 2 AndAlso r.ExitCode = HistoryStore.ExitOk,
+                  String.Format("maxTs-cutoff={0} checkpointed={1} unsettled={2} exit={3}", maxTs - cutoff, cp.Count, r.Unsettled, r.ExitCode))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A94d: kill-and-resume at EVERY point gives the same files as an uninterrupted run.
+    ' Three days across a month boundary. A kill is simulated at every request and at every
+    ' write stage (after the tmp file, after the rename, after the checkpoint) of every day; the
+    ' run is then repeated against a clean host. The input that makes it fail: a kill AFTER the
+    ' rename and BEFORE the checkpoint — the month file already holds the day, the checkpoint does
+    ' not, so the resume re-fetches it. An appending merge duplicates it; a checkpoint written
+    ' before the rename loses it.
+    Private Sub A94d_KillAtAnyPointThenResumeIsByteIdenticalNoGapNoDuplicate()
+        Dim refDir As String = A48TempStore("94dref")
+        Dim bad As New List(Of String)()
+        Dim points As Integer = 0
+        Try
+            Dim fromDay As DateTime = A94Day(2025, 2, 27)
+            Dim toExcl As DateTime = A94Day(2025, 3, 2)
+            Dim f0 As Long = HistoryStore.DayStartMs(fromDay)
+            Dim tape = A94Tape(f0 - 3600000L, HistoryStore.DayStartMs(toExcl) + 3600000L, {1, 1, 2, 3, 1, 7, 1, 2}, 60000L, 254000000L)
+            Dim nowMs As Long = HistoryStore.DayStartMs(A94Day(2025, 3, 5))
+            Dim refHost As New A94FakeHost(tape)
+            Dim refRun = A94Run(refDir, refHost, fromDay, toExcl, nowMs)
+            Dim refFeb As Byte() = File.ReadAllBytes(TradeStoreWriter.TradeFileFor(refDir, 2025, 2))
+            Dim refMar As Byte() = File.ReadAllBytes(TradeStoreWriter.TradeFileFor(refDir, 2025, 3))
+            Dim total As Integer = refHost.Requests
+
+            Dim killPlans As New List(Of (Label As String, KillAt As Integer, Stage As String, Nth As Integer))()
+            For k As Integer = 1 To total
+                killPlans.Add(("request " & k, k, "", 0))
+            Next
+            For Each st In {"after-tmp", "after-rename", "after-checkpoint"}
+                For n As Integer = 1 To 3
+                    killPlans.Add((st & " #" & n, -1, st, n))
+                Next
+            Next
+
+            For Each kp In killPlans
+                Dim dir As String = A48TempStore("94d")
+                Try
+                    points += 1
+                    Dim h1 As New A94FakeHost(tape) With {.KillAt = kp.KillAt}
+                    Dim seen As Integer = 0
+                    Dim hook As Action(Of String) = Sub(s As String)
+                                                        If s = kp.Stage Then
+                                                            seen += 1
+                                                            If seen = kp.Nth Then Throw New A94Kill()
+                                                        End If
+                                                    End Sub
+                    Dim killed As Boolean = False
+                    Try
+                        A94Run(dir, h1, fromDay, toExcl, nowMs, hook)
+                    Catch ex As A94Kill
+                        killed = True
+                    End Try
+                    Dim r2 = A94Run(dir, New A94FakeHost(tape), fromDay, toExcl, nowMs)
+                    Dim febPath As String = TradeStoreWriter.TradeFileFor(dir, 2025, 2)
+                    Dim marPath As String = TradeStoreWriter.TradeFileFor(dir, 2025, 3)
+                    Dim feb As Byte() = If(File.Exists(febPath), File.ReadAllBytes(febPath), New Byte() {})
+                    Dim mar As Byte() = If(File.Exists(marPath), File.ReadAllBytes(marPath), New Byte() {})
+                    Dim cp = HistoryStore.LoadCheckpoint(dir)
+                    Dim allOk As Boolean = cp.Count = 3 AndAlso cp.Values.All(Function(e) e.Status = HistoryStore.StatusOk)
+                    Dim seqs = A94FileSeqs(dir, 2025, 2).Concat(A94FileSeqs(dir, 2025, 3)).ToList()
+                    Dim leftovers As Integer = Directory.GetFiles(dir, "*" & HistoryStore.TmpSuffix).Length +
+                                               If(File.Exists(Path.Combine(dir, HistoryStore.LockFileName)), 1, 0)
+                    If Not killed OrElse r2.ExitCode <> HistoryStore.ExitOk OrElse Not feb.SequenceEqual(refFeb) OrElse
+                       Not mar.SequenceEqual(refMar) OrElse Not allOk OrElse seqs.Distinct().Count() <> seqs.Count OrElse leftovers <> 0 Then
+                        bad.Add(String.Format("{0}: killed={1} exit={2} febSame={3} marSame={4} allOk={5} rows={6} distinct={7} leftovers={8}",
+                                              kp.Label, killed, r2.ExitCode, feb.SequenceEqual(refFeb), mar.SequenceEqual(refMar),
+                                              allOk, seqs.Count, seqs.Distinct().Count(), leftovers))
+                    End If
+                Finally
+                    A48Cleanup(dir)
+                End Try
+            Next
+            Dim refSeqs = A94FileSeqs(refDir, 2025, 2).Concat(A94FileSeqs(refDir, 2025, 3)).ToList()
+            Dim want = tape.Where(Function(t) t.Rec.Timestamp >= f0 AndAlso t.Rec.Timestamp < HistoryStore.DayStartMs(toExcl)) _
+                           .Select(Function(t) t.Rec.TradeSeq).ToList()
+            Check(String.Format("A94d history resume (H-2) — a kill at each of {0} points (every request, every write stage of every day), then a re-run: month files byte-identical to an uninterrupted run, all 3 days OK, no duplicate seq, no tmp or lock left; the reference holds every seq of the 3 days",
+                                points),
+                  bad.Count = 0 AndAlso points = total + 9 AndAlso refRun.DaysOk = 3 AndAlso refSeqs.SequenceEqual(want),
+                  String.Join(" | ", bad.Take(4)) & String.Format(" (bad {0}/{1}; ref ok={2} rows={3} want={4})", bad.Count, points, refRun.DaysOk, refSeqs.Count, want.Count))
+        Finally
+            A48Cleanup(refDir)
+        End Try
+    End Sub
+
+    ' -- A94e: a re-run over completed days is a no-op (H-3); a forced re-fetch is byte-identical.
+    ' The input that makes it fail: a second run over the same range. A planner that ignores the
+    ' checkpoint re-fetches (requests > 0) and rewrites the file (LastWriteTimeUtc moves).
+    Private Sub A94e_RerunOfCompletedDaysTouchesNothing()
+        Dim dir As String = A48TempStore("94e")
+        Try
+            Dim day As DateTime = A94Day(2025, 9, 15)
+            Dim d0 As Long = HistoryStore.DayStartMs(day)
+            Dim tape = A94Tape(d0 - 3600000L, d0 + 2L * HistoryStore.DayMs + 3600000L, {1, 2, 5}, 60000L, 255000000L)
+            Dim nowMs As Long = d0 + 5L * HistoryStore.DayMs
+            A94Run(dir, New A94FakeHost(tape), day, day.AddDays(2), nowMs)
+            Dim p As String = TradeStoreWriter.TradeFileFor(dir, 2025, 9)
+            Dim bytes1 As Byte() = File.ReadAllBytes(p)
+            Dim cp1 As Byte() = File.ReadAllBytes(Path.Combine(dir, HistoryStore.CheckpointFileName))
+            File.SetLastWriteTimeUtc(p, New DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+            Dim h2 As New A94FakeHost(tape)
+            Dim r2 = A94Run(dir, h2, day, day.AddDays(2), nowMs)
+            Dim untouched As Boolean = h2.Requests = 0 AndAlso r2.AlreadyComplete = 2 AndAlso
+                                       File.ReadAllBytes(p).SequenceEqual(bytes1) AndAlso
+                                       File.GetLastWriteTimeUtc(p) = New DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc) AndAlso
+                                       File.ReadAllBytes(Path.Combine(dir, HistoryStore.CheckpointFileName)).SequenceEqual(cp1)
+            Check("A94e history re-run (H-3) — a second run over two completed days makes 0 requests and leaves the month file and checkpoint byte-identical and unwritten",
+                  untouched, String.Format("requests={0} alreadyComplete={1} mtimeKept={2}", h2.Requests, r2.AlreadyComplete,
+                                           File.GetLastWriteTimeUtc(p) = New DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)))
+            File.Delete(Path.Combine(dir, HistoryStore.CheckpointFileName))
+            Dim r3 = A94Run(dir, New A94FakeHost(tape), day, day.AddDays(2), nowMs)
+            Check("A94e history re-run — with the checkpoint deleted, the forced re-fetch REPLACES the days: the month file is byte-identical",
+                  r3.DaysOk = 2 AndAlso File.ReadAllBytes(p).SequenceEqual(bytes1), "ok=" & r3.DaysOk)
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A94f: H-6 — an eleven-column dev-store month file (HDS-1 (b)) reads through the shared
+    ' parse and through HistoricalStore.LoadTradeRangeFrom with every row and every field.
+    ' The input that makes it fail: the four HDS-1 columns written anywhere but AFTER the seven
+    ' shared columns — every existing reader would then read a price as a trade_id.
+    Private Sub A94f_ElevenColumnFileReadsThroughTheSharedParseAndTheReplayLoader()
+        Dim dir As String = A48TempStore("94f")
+        Try
+            Dim day As DateTime = A94Day(2025, 11, 4)
+            Dim d0 As Long = HistoryStore.DayStartMs(day)
+            Dim rows As New List(Of HistoryTrade)()
+            For k As Integer = 0 To 1999
+                rows.Add(A94Trade(256000997L + k, d0 + 1000L + k \ 3))   ' groups of 3 per millisecond
+            Next
+            Dim wantLiq As Integer = rows.Where(Function(t) t.Rec.Liquidation = "T").Count()
+            Try
+                HistoryStore.MergeDayIntoMonth(dir, day, rows)
+            Catch ex As HistoryStoreException
+                Check("A94f H-6 — the 11-column file is written and re-reads", False, ex.Message)
+                Return
+            End Try
+            Dim p As String = TradeStoreWriter.TradeFileFor(dir, 2025, 11)
+            Dim lines As String() = File.ReadAllLines(p)
+            Dim shared7 = TradeStoreWriter.ReadTradeFile(p)
+            Dim replay = HistoricalStore.LoadTradeRangeFrom(dir, day, day.AddDays(1))
+            Dim fieldBad As Integer = 0
+            Dim prefixBad As Integer = 0
+            For i As Integer = 0 To rows.Count - 1
+                Dim rec As TradeRecord = Nothing
+                Dim x As HistoryExtras = Nothing
+                Dim w As HistoryTrade = rows(i)
+                If Not HistoryStore.TryParseHistoryRow(lines(i + 1), rec, x) OrElse
+                   rec.TradeSeq <> w.Rec.TradeSeq OrElse rec.TradeId <> w.Rec.TradeId OrElse rec.Price <> w.Rec.Price OrElse
+                   rec.Amount <> w.Rec.Amount OrElse rec.Liquidation <> w.Rec.Liquidation OrElse
+                   Not Nullable.Equals(x.MarkPrice, w.Extras.MarkPrice) OrElse Not Nullable.Equals(x.IndexPrice, w.Extras.IndexPrice) OrElse
+                   Not Nullable.Equals(x.TickDirection, w.Extras.TickDirection) OrElse Not Nullable.Equals(x.Contracts, w.Extras.Contracts) Then
+                    fieldBad += 1
+                End If
+                If Not lines(i + 1).StartsWith(TradeStoreWriter.FormatRow(w.Rec) & ",", StringComparison.Ordinal) Then prefixBad += 1
+            Next
+            Dim sharedOk As Boolean = shared7.Count = rows.Count AndAlso
+                                      shared7.Select(Function(t) t.TradeSeq).SequenceEqual(rows.Select(Function(t) t.Rec.TradeSeq)) AndAlso
+                                      wantLiq >= 1 AndAlso shared7.Where(Function(t) t.Liquidation = "T").Count() = wantLiq AndAlso
+                                      shared7.All(Function(t) t.HasIdentity)
+            Check("A94f H-6 — an 11-column dev-store file: header = box header + 4 HDS-1 columns; each row's first 7 columns are TradeStoreWriter.FormatRow; ReadTradeFile and HistoricalStore.LoadTradeRangeFrom return every row with identity; the extras round-trip (absent contracts stays absent)",
+                  lines(0) = TradeStoreWriter.HeaderLine & "," & HistoryStore.ExtraHeader AndAlso lines.Length = rows.Count + 1 AndAlso
+                  sharedOk AndAlso replay.Count = rows.Count AndAlso fieldBad = 0 AndAlso prefixBad = 0,
+                  String.Format("lines={0} shared={1} sharedOk={2} replay={3} fieldBad={4} prefixBad={5}",
+                                lines.Length, shared7.Count, sharedOk, replay.Count, fieldBad, prefixBad))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A94g: pacing and backoff; a range that keeps failing STOPS the run, it is never skipped.
+    ' SHIPPED BEHAVIOUR: the backoff ladder, the retry count and the pause are derived from
+    ' HistoryStore's Public Consts. The input that makes it fail: one seq page failing on every
+    ' attempt. Skipping it after the retries, the day completes from a re-request and is
+    ' checkpointed as if nothing happened.
+    Private Sub A94g_FailingRangeStopsTheRunWithTheRuledBackoff()
+        Dim dir As String = A48TempStore("94g")
+        Dim dir2 As String = A48TempStore("94g2")
+        Try
+            Dim day As DateTime = A94Day(2025, 8, 4)
+            Dim d0 As Long = HistoryStore.DayStartMs(day)
+            Dim tape = A94Tape(d0 - 3600000L, d0 + HistoryStore.DayMs + 3600000L, {1, 2, 3}, 60000L, 257000000L)
+            Dim nowMs As Long = d0 + 3L * HistoryStore.DayMs
+            Dim failQ As String = Nothing
+            Dim seqCount As Integer = 0
+            Dim failFn As Func(Of Integer, String, Boolean) =
+                Function(n As Integer, q As String)
+                    If q.StartsWith("get_last_trades_by_instrument?", StringComparison.Ordinal) Then
+                        seqCount += 1
+                        If seqCount = 2 AndAlso failQ Is Nothing Then failQ = q
+                    End If
+                    Return failQ IsNot Nothing AndAlso q = failQ
+                End Function
+            Dim host As New A94FakeHost(tape) With {.FailWhen = failFn}
+            Dim delays As New List(Of Integer)()
+            Dim r = A94Run(dir, host, day, day.AddDays(1), nowMs, Nothing, delays)
+            Dim wantBackoff As New List(Of Integer)()
+            For k As Integer = 0 To HistoryStore.MaxRetries - 1
+                wantBackoff.Add(HistoryStore.FirstBackoffMs << k)
+            Next
+            Dim gotBackoff = delays.Where(Function(d) d <> HistoryStore.PacingDelayMs).ToList()
+            Dim attempts As Integer = host.Queries.Where(Function(q) q = failQ).Count()
+            Dim successes As Integer = host.Requests - attempts
+            Dim paced As Integer = delays.Where(Function(d) d = HistoryStore.PacingDelayMs).Count()
+            Check(String.Format("A94g history pacing — a page failing every time: {0} attempts, backoff {1} ms, then the run STOPS (exit {2}); the day is not checkpointed and no month file is written; every answered request is followed by the {3} ms pause",
+                                HistoryStore.MaxRetries + 1, String.Join("/", wantBackoff), HistoryStore.ExitTransportStop, HistoryStore.PacingDelayMs),
+                  r.ExitCode = HistoryStore.ExitTransportStop AndAlso attempts = HistoryStore.MaxRetries + 1 AndAlso
+                  gotBackoff.SequenceEqual(wantBackoff) AndAlso paced = successes AndAlso
+                  HistoryStore.LoadCheckpoint(dir).Count = 0 AndAlso Not File.Exists(TradeStoreWriter.TradeFileFor(dir, 2025, 8)),
+                  String.Format("exit={0} attempts={1} backoff=[{2}] paced={3} successes={4} checkpointed={5} file={6}",
+                                r.ExitCode, attempts, String.Join(",", gotBackoff), paced, successes,
+                                HistoryStore.LoadCheckpoint(dir).Count, File.Exists(TradeStoreWriter.TradeFileFor(dir, 2025, 8))))
+
+            ' Transient: the same page fails twice, then answers. The day completes, 2 retries.
+            Dim failQ2 As String = Nothing
+            Dim seq2 As Integer = 0
+            Dim fails2 As Integer = 0
+            Dim host2 As New A94FakeHost(tape) With {
+                .FailWhen = Function(n As Integer, q As String)
+                                If q.StartsWith("get_last_trades_by_instrument?", StringComparison.Ordinal) Then
+                                    seq2 += 1
+                                    If seq2 = 2 AndAlso failQ2 Is Nothing Then failQ2 = q
+                                End If
+                                If failQ2 IsNot Nothing AndAlso q = failQ2 AndAlso fails2 < 2 Then
+                                    fails2 += 1
+                                    Return True
+                                End If
+                                Return False
+                            End Function}
+            Dim r2 = A94Run(dir2, host2, day, day.AddDays(1), nowMs)
+            Dim en2 As HistoryDayEntry = A94Entry(dir2, "2025-08-04")
+            Check("A94g history pacing — a page failing twice then answering: the day is OK with 2 retries and every seq",
+                  r2.ExitCode = HistoryStore.ExitOk AndAlso en2.Status = HistoryStore.StatusOk AndAlso en2.Retries = 2 AndAlso
+                  A94FileSeqs(dir2, 2025, 8).SequenceEqual(A94DaySeqs(tape, day)),
+                  String.Format("exit={0} status={1} retries={2}", r2.ExitCode, en2.Status, en2.Retries))
+        Finally
+            A48Cleanup(dir)
+            A48Cleanup(dir2)
+        End Try
+    End Sub
+
+    ' -- A94h: the comparison (§4). A box store with a hole, duplicates, a seq-less legacy row and
+    ' an unflagged copy of a liquidation PASSES (holes are only-in-dev, counted). The inputs that
+    ' make it fail, one per variant: a seq the dev store lacks; a price that differs; a box flag the
+    ' dev store lacks; a DUPLICATE box row that differs (every box row is compared, not one per seq).
+    Private Sub A94h_ComparePassesBoxHolesAndFailsEveryBoxOnlyFact()
+        Dim dev As String = A48TempStore("94hdev")
+        Dim boxRoot As String = A48TempStore("94hbox")
+        Try
+            Dim day1 As DateTime = A94Day(2025, 12, 1)
+            Dim day2 As DateTime = A94Day(2025, 12, 2)
+            Dim d0 As Long = HistoryStore.DayStartMs(day1)
+            Dim tape = A94Tape(d0, d0 + 2L * HistoryStore.DayMs, {1, 2}, 120000L, 258000000L)   ' ~2,160 trades; seqs 258000669 and 258001666 are liquidations (mod 997)
+            Dim cp As New Dictionary(Of String, HistoryDayEntry)(StringComparer.Ordinal)
+            For Each dday In {day1, day2}
+                Dim rows = tape.Where(Function(t) HistoryStore.DayOfMs(t.Rec.Timestamp) = dday).ToList()
+                HistoryStore.MergeDayIntoMonth(dev, dday, rows)
+                cp(HistoryStore.DayKey(dday)) = New HistoryDayEntry With {.Day = dday, .Status = HistoryStore.StatusOk, .Rows = rows.Count,
+                    .FirstSeq = rows.First().Rec.TradeSeq, .LastSeq = rows.Last().Rec.TradeSeq}
+            Next
+            HistoryStore.SaveCheckpoint(dev, cp)
+            Dim liqSeq As Long = tape.First(Function(t) t.Rec.Liquidation = "T").Rec.TradeSeq
+
+            ' Box rows: 7 columns, liquidation always "none" (the box copy predates the flag),
+            ' a 5-seq hole, the first 10 rows duplicated, one row written as a seq-less legacy row.
+            Dim build = Function(mutate As Action(Of List(Of String))) As String
+                            Dim bdir As String = Path.Combine(boxRoot, Guid.NewGuid().ToString("N").Substring(0, 6))
+                            Directory.CreateDirectory(bdir)
+                            Dim ls As New List(Of String) From {TradeStoreWriter.HeaderLine}
+                            For Each t In tape
+                                Dim s As Long = t.Rec.TradeSeq
+                                If s >= 258000100L AndAlso s < 258000105L Then Continue For
+                                Dim b As New TradeRecord With {.Timestamp = t.Rec.Timestamp, .Price = t.Rec.Price, .Amount = t.Rec.Amount,
+                                    .Direction = t.Rec.Direction, .Liquidation = "none", .TradeId = t.Rec.TradeId, .TradeSeq = s}
+                                If s = 258000050L Then
+                                    ls.Add(TradeStoreWriter.LegacyRowKey(b))
+                                Else
+                                    ls.Add(TradeStoreWriter.FormatRow(b))
+                                End If
+                                If s < 258000010L Then ls.Add(TradeStoreWriter.FormatRow(b))
+                            Next
+                            If mutate IsNot Nothing Then mutate(ls)
+                            File.WriteAllLines(TradeStoreWriter.TradeFileFor(bdir, 2025, 12), ls)
+                            Return bdir
+                        End Function
+            Dim rowIndexOf = Function(ls As List(Of String), seq As Long) ls.FindIndex(Function(l) l.EndsWith("," & seq.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+
+            Dim pass = HistoryCompare.Compare(build(Nothing), dev, day1, day2.AddDays(1))
+            Check("A94h history compare — box with a 5-seq hole, duplicated rows, a seq-less legacy row and an unflagged liquidation copy: PASS; 5 only in dev; the liquidation counted as dev-flagged/box-none",
+                  pass.Verdict = "PASS" AndAlso pass.ComparedDays.Count = 2 AndAlso pass.OnlyInDev = 5 AndAlso pass.BoxSeqless = 1 AndAlso
+                  pass.SeqlessUnmatched = 0 AndAlso pass.LiqDevFlaggedBoxNone >= 1 AndAlso pass.OnlyInBox = 0,
+                  String.Join(" ", HistoryCompare.Report(pass).Skip(2)))
+
+            Dim extra = HistoryCompare.Compare(build(Sub(ls)
+                                                         ls.Add(TradeStoreWriter.FormatRow(New TradeRecord With {.Timestamp = d0 + 5000L, .Price = 1, .Amount = 10,
+                                                             .Direction = "buy", .Liquidation = "none", .TradeId = "x1", .TradeSeq = 999999999L}))
+                                                     End Sub), dev, day1, day2.AddDays(1))
+            Dim price = HistoryCompare.Compare(build(Sub(ls)
+                                                         Dim i As Integer = rowIndexOf(ls, 258000300L)
+                                                         Dim parts = ls(i).Split(","c)
+                                                         parts(1) = "1.50"
+                                                         ls(i) = String.Join(",", parts)
+                                                     End Sub), dev, day1, day2.AddDays(1))
+            Dim liq = HistoryCompare.Compare(build(Sub(ls)
+                                                       Dim i As Integer = rowIndexOf(ls, 258000301L)
+                                                       Dim parts = ls(i).Split(","c)
+                                                       parts(4) = "T"
+                                                       ls(i) = String.Join(",", parts)
+                                                   End Sub), dev, day1, day2.AddDays(1))
+            Dim dup = HistoryCompare.Compare(build(Sub(ls)
+                                                       ' Row for seq 258000003 appears twice; change the SECOND copy's amount.
+                                                       Dim i As Integer = ls.FindLastIndex(Function(l) l.EndsWith(",258000003", StringComparison.Ordinal))
+                                                       Dim parts = ls(i).Split(","c)
+                                                       parts(2) = "999.00"
+                                                       ls(i) = String.Join(",", parts)
+                                                   End Sub), dev, day1, day2.AddDays(1))
+            Check("A94h history compare — FAIL on: a seq only in the box; a price mismatch; a box flag the dev store lacks; a differing DUPLICATE box row",
+                  extra.Verdict = "FAIL" AndAlso extra.OnlyInBox = 1 AndAlso
+                  price.Verdict = "FAIL" AndAlso price.Mismatch("price") = 1 AndAlso
+                  liq.Verdict = "FAIL" AndAlso liq.LiqBoxFlaggedDevNone = 1 AndAlso
+                  dup.Verdict = "FAIL" AndAlso dup.Mismatch("amount") = 1,
+                  String.Format("extra={0}/{1} price={2}/{3} liq={4}/{5} dup={6}/{7}", extra.Verdict, extra.OnlyInBox, price.Verdict,
+                                price.Mismatch("price"), liq.Verdict, liq.LiqBoxFlaggedDevNone, dup.Verdict, dup.Mismatch("amount")))
+        Finally
+            A48Cleanup(dev)
+            A48Cleanup(boxRoot)
+        End Try
+    End Sub
+
+    ' -- A94i: the stage-4 pass rule (§4.2). SHIPPED BEHAVIOUR: thresholds from
+    ' HistoryCompare.PassRuleMinComparisons / PassRuleMinSpanDays. The inputs that make it fail:
+    ' a run-date span one day short; one FAIL among enough PASS rows; too few PASS rows.
+    Private Sub A94i_PassRuleNeedsEnoughPassesOverTheSpanAndNoFail()
+        Dim dir As String = A48TempStore("94i")
+        Try
+            Dim t0 As New DateTime(2026, 11, 26, 12, 0, 0, DateTimeKind.Utc)
+            Dim n As Integer = HistoryCompare.PassRuleMinComparisons
+            Dim span As Integer = HistoryCompare.PassRuleMinSpanDays
+            Dim mk = Function(name As String, rowsSpec As (OffsetDays As Double, Verdict As String)()) As String
+                         Dim p As String = Path.Combine(dir, name & ".csv")
+                         Dim ls As New List(Of String) From {HistoryCompare.LedgerHeader}
+                         For Each rs In rowsSpec
+                             ls.Add(t0.AddDays(rs.OffsetDays).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture) &
+                                    ",2026-11-20,2026-11-27,7,2026-11-20,2026-11-26,1,1,0,0,0,0,0,0," & rs.Verdict)
+                         Next
+                         File.WriteAllLines(p, ls)
+                         Return p
+                     End Function
+            Dim evenly = Function(total As Double, k As Integer, verdict As String) As (Double, String)()
+                             Return Enumerable.Range(0, k).Select(Function(i) (total * i / Math.Max(1, k - 1), verdict)).ToArray()
+                         End Function
+            Dim met = HistoryCompare.EvaluatePassRule(mk("met", evenly(span, n, "PASS")), New List(Of String)())
+            Dim short1 = HistoryCompare.EvaluatePassRule(mk("short", evenly(span - 1, n, "PASS")), New List(Of String)())
+            Dim withFail = HistoryCompare.EvaluatePassRule(mk("fail", evenly(span, n, "PASS").Concat({(span / 2.0, "FAIL")}).ToArray()), New List(Of String)())
+            Dim tooFew = HistoryCompare.EvaluatePassRule(mk("few", evenly(span + 10, n - 1, "PASS")), New List(Of String)())
+            Check(String.Format("A94i history pass rule — MET at {0} PASS over {1} days; NOT MET at {1}−1 days, with one FAIL, or with {2} PASS", n, span, n - 1),
+                  met AndAlso Not short1 AndAlso Not withFail AndAlso Not tooFew,
+                  String.Format("met={0} short={1} withFail={2} tooFew={3}", met, short1, withFail, tooFew))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A94j: a torn row (audit row E1) is never skipped silently. The input that makes it fail:
+    ' a half-written row in the middle of a month file. The merge must refuse (the file unchanged,
+    ' no tmp left), and status --deep must report it.
+    Private Sub A94j_TornRowStopsTheMergeAndIsReportedByTheDeepStatus()
+        Dim dir As String = A48TempStore("94j")
+        Try
+            Dim day1 As DateTime = A94Day(2026, 1, 10)
+            Dim d0 As Long = HistoryStore.DayStartMs(day1)
+            Dim rows1 = Enumerable.Range(0, 50).Select(Function(k) A94Trade(259000000L + k, d0 + k * 1000L)).ToList()
+            HistoryStore.MergeDayIntoMonth(dir, day1, rows1)
+            HistoryStore.SaveCheckpoint(dir, New Dictionary(Of String, HistoryDayEntry) From {
+                {"2026-01-10", New HistoryDayEntry With {.Day = day1, .Status = HistoryStore.StatusOk, .Rows = 50,
+                    .FirstSeq = 259000000L, .LastSeq = 259000049L}}})
+            Dim p As String = TradeStoreWriter.TradeFileFor(dir, 2026, 1)
+            Dim ls = File.ReadAllLines(p).ToList()
+            ls(20) = ls(20).Substring(0, 9)                ' a torn row: "17684...." cut mid-timestamp
+            File.WriteAllLines(p, ls)
+            Dim before As Byte() = File.ReadAllBytes(p)
+            Dim refused As Boolean = False
+            Dim msg As String = ""
+            Try
+                HistoryStore.MergeDayIntoMonth(dir, A94Day(2026, 1, 11),
+                    Enumerable.Range(0, 5).Select(Function(k) A94Trade(259000100L + k, d0 + HistoryStore.DayMs + k)).ToList())
+            Catch ex As HistoryStoreException
+                refused = True
+                msg = ex.Message
+            End Try
+            Dim st = HistoryCompare.Status(dir, True)
+            Dim reported As Boolean = st.Problems.Any(Function(s) s.Contains("unparseable"))
+            Check("A94j history torn row (audit row E1) — the merge refuses a month file holding a torn row (file byte-identical, no tmp left) and status --deep reports it",
+                  refused AndAlso msg.Contains("unparseable") AndAlso File.ReadAllBytes(p).SequenceEqual(before) AndAlso
+                  Directory.GetFiles(dir, "*" & HistoryStore.TmpSuffix).Length = 0 AndAlso reported,
+                  String.Format("refused={0} msg='{1}' same={2} reported={3}", refused, msg, File.ReadAllBytes(p).SequenceEqual(before), reported))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A94k: a run aimed at a BOX store (seven-column header) refuses to rewrite it. The input
+    ' that makes it fail: --store pointed at a backtest_data copy. The guard is the header check
+    ' (asserted by its reason), not the row parse that would also trip later.
+    Private Sub A94k_ARunAimedAtABoxStoreRefusesOnTheHeader()
+        Dim dir As String = A48TempStore("94k")
+        Try
+            Dim day As DateTime = A94Day(2025, 4, 8)
+            Dim d0 As Long = HistoryStore.DayStartMs(day)
+            Dim boxFile As String = TradeStoreWriter.TradeFileFor(dir, 2025, 4)
+            File.WriteAllLines(boxFile, {TradeStoreWriter.HeaderLine, "1744070400123,80000.00,10.00,buy,none,1,2"})
+            Dim before As Byte() = File.ReadAllBytes(boxFile)
+            Dim tape = A94Tape(d0 - 3600000L, d0 + HistoryStore.DayMs + 3600000L, {1, 2}, 60000L, 260000000L)
+            Dim r = A94Run(dir, New A94FakeHost(tape), day, day.AddDays(1), d0 + 3L * HistoryStore.DayMs)
+            Check("A94k history foreign store — a run whose month file carries the 7-column box header stops (exit 1, 'foreign header') and leaves the file byte-identical",
+                  r.ExitCode = HistoryStore.ExitBadArgsOrStore AndAlso r.StoppedReason.Contains("foreign header") AndAlso
+                  File.ReadAllBytes(boxFile).SequenceEqual(before),
+                  String.Format("exit={0} reason='{1}'", r.ExitCode, r.StoppedReason))
+        Finally
+            A48Cleanup(dir)
+        End Try
     End Sub
 
 End Module

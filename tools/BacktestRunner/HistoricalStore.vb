@@ -622,9 +622,18 @@ Public Class HistoricalStore
     ''' where identity exists and falls back to the five fields only where it does not. Dedup is
     ''' applied ACROSS the whole month union, not per file, exactly as before.</summary>
     Public Shared Function LoadTradeRange(warmupStartUtc As DateTime, toUtc As DateTime) As List(Of TradeRecord)
+        Return LoadTradeRangeFrom(StoreDir, warmupStartUtc, toUtc)
+    End Function
+
+    ''' <summary>[history store H-6, docs/history-data-store-spec.md §5] LoadTradeRange with the
+    ''' trade directory as a parameter, so the replay can read the dev history store through the
+    ''' SAME parse, dedup and sort (one seam, no copy). LoadTradeRange is this with StoreDir.
+    ''' The parameter is `tradeDir`, not `storeDir`: VB is case-insensitive, and a `storeDir`
+    ''' parameter would shadow the StoreDir const inside this body.</summary>
+    Public Shared Function LoadTradeRangeFrom(tradeDir As String, warmupStartUtc As DateTime, toUtc As DateTime) As List(Of TradeRecord)
         Dim raw As New List(Of TradeRecord)()
         For Each m In EnumerateMonths(warmupStartUtc, toUtc)
-            raw.AddRange(TradeStoreWriter.ReadTradeFile(TradeFileFor(m.Year, m.Month)))
+            raw.AddRange(TradeStoreWriter.ReadTradeFile(TradeStoreWriter.TradeFileFor(tradeDir, m.Year, m.Month)))
         Next
         Dim all = TradeStoreWriter.DedupTrades(raw)
         all.Sort(Function(a, b) a.Timestamp.CompareTo(b.Timestamp))

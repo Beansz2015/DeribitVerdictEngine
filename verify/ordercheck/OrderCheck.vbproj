@@ -187,6 +187,11 @@
          the `coverage` verb's host-agnostic classification core. BacktestProgram stays
          OUT — its own Main. -->
     <Compile Include="..\..\tools\BacktestRunner\CoverageReport.vb" />
+    <!-- History data store, stage 2 (A94 — docs/history-data-store-spec.md §5): the store,
+         paging, resume and comparison logic. Network-free — its one HTTP seam is injected.
+         HistoryHostHttp.vb (the HttpClient) and HistoryCli.vb (the verb) stay OUT. -->
+    <Compile Include="..\..\tools\BacktestRunner\HistoryStore.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\HistoryCompare.vb" />
   </ItemGroup>
 
 </Project>

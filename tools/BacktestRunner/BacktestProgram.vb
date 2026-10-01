@@ -16,6 +16,9 @@
 '                            [--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue]
 '                            [--venue-hours <1-24>] [--venue-dump <path.json.gz>]
 '                            [--evidence-dir <dir>] [--store-dir <dir>]
+'   BacktestRunner history backfill|topup|status|compare|passrule ...   (HistoryCli.vb;
+'                            docs/history-data-store-spec.md; runbook
+'                            docs/history-store-backfill-runbook.md)
 '
 ' The `coverage` verb reports raw-trade capture health (docs/trade-store-coverage-report
 ' -proposal.md): SEVEN classes per weekday UTC hour, S4 candle/funding completeness, and an
@@ -59,6 +62,13 @@ Public Class BacktestProgram
     End Function
 
     Private Shared Async Function RunAsync(args As String()) As Task(Of Integer)
+        ' [history store, docs/history-data-store-spec.md §3] Dispatched BEFORE the move to the
+        ' repo root: the history verbs run on the cloud backfill host (no repo) and take
+        ' caller-relative paths. They read no settings.json.
+        If args.Length > 0 AndAlso String.Equals(args(0), "history", StringComparison.OrdinalIgnoreCase) Then
+            Return Await HistoryCli.RunAsync(args)
+        End If
+
         SetWorkingDirectoryToRepoRoot()
 
         If args.Length = 0 Then
@@ -84,6 +94,7 @@ Public Class BacktestProgram
         Dim storeDirOverride As String = ""
         Dim venueHoursText As String = ""
         Dim venueDumpPath As String = ""
+        Dim tradeDir As String = ""
 
         Dim i As Integer = 1
         While i < args.Length
@@ -137,6 +148,9 @@ Public Class BacktestProgram
                 Case "--venue-dump"
                     i += 1
                     If i < args.Length Then venueDumpPath = args(i)
+                Case "--trade-dir"
+                    i += 1
+                    If i < args.Length Then tradeDir = args(i) Else tradeDir = "(missing)"
             End Select
             i += 1
         End While
@@ -178,8 +192,18 @@ Public Class BacktestProgram
                 Console.WriteLine("[BacktestRunner] Output:   " & Path.GetFullPath(outPath))
                 Console.WriteLine("[BacktestRunner] Bar mode: " &
                                   If(useFormingStub, "forming stub (§7.1 live mirror)", "CLOSED BARS ONLY (D3 A/B arm)"))
+                ' [history store H-6] --trade-dir reads TRADES from another store (e.g. the dev
+                ' history store); candles and funding still come from backtest_data.
+                If tradeDir <> "" Then
+                    If Not Directory.Exists(tradeDir) Then
+                        Console.Error.WriteLine("[BacktestRunner] --trade-dir not found: " & tradeDir)
+                        Return 1
+                    End If
+                    Console.WriteLine("[BacktestRunner] Trades:   " & Path.GetFullPath(tradeDir) & "   [--trade-dir]")
+                End If
 
-                Dim summary = ReplayLoop.Run(cfg, fromUtc, toUtc, outPath, useFormingStub)
+                Dim summary = ReplayLoop.Run(cfg, fromUtc, toUtc, outPath, useFormingStub,
+                                             If(tradeDir = "", Nothing, Path.GetFullPath(tradeDir)))
 
                 Console.WriteLine("")
                 Console.WriteLine("[BacktestRunner] === Replay summary ===")
@@ -437,7 +461,7 @@ Public Class BacktestProgram
         Console.Error.WriteLine("Usage:")
         Console.Error.WriteLine("  BacktestRunner fetch    --from yyyy-MM-dd --to yyyy-MM-dd")
         Console.Error.WriteLine("  BacktestRunner replay   --from yyyy-MM-dd --to yyyy-MM-dd " &
-                                "[--settings <path>] [--out <path>] [--closed-bars]")
+                                "[--settings <path>] [--out <path>] [--closed-bars] [--trade-dir <store>]")
         Console.Error.WriteLine("  BacktestRunner validate --from yyyy-MM-dd[Thh:mm] --to yyyy-MM-dd[Thh:mm] " &
                                 "--live <path> [--live2 <path>] [--replay <syntheticCsv>] " &
                                 "[--report <mdOut>] [--settings <path>]")
@@ -446,6 +470,7 @@ Public Class BacktestProgram
                                 "[--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue] " &
                                 "[--venue-hours <1-24>] [--venue-dump <path.json.gz>] " &
                                 "[--evidence-dir <dir>] [--store-dir <dir>]")
+        HistoryCli.PrintUsage()
     End Sub
 
     Private Shared Function ParseDate(s As String) As DateTime

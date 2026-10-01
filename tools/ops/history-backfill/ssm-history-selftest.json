@@ -1,0 +1,14 @@
+{"commands":[
+"set -e",
+"aws s3 cp s3://deribit-engine-bucket/history-backfill/tool/history-tool.tar.gz /tmp/history-tool.tar.gz --region eu-west-2 --only-show-errors",
+"rm -rf /opt/history && mkdir -p /opt/history",
+"tar -xzf /tmp/history-tool.tar.gz -C /opt/history",
+"sed -i 's/\r$//' /opt/history/history-backfill-cloud.sh",
+"chmod +x /opt/history/runner/BacktestRunner",
+"export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
+"rm -rf /data/selftest && mkdir -p /data/selftest",
+"/opt/history/runner/BacktestRunner history backfill --from 2026-09-27 --to 2026-09-28 --store /data/selftest",
+"/opt/history/runner/BacktestRunner history status --store /data/selftest --deep",
+"sha256sum /data/selftest/trades_2026-09.csv",
+"df -h / | tail -1"
+]}

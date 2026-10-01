@@ -219,10 +219,14 @@ Public Class ReplayLoop
     ' variable is whether the terminal bar is a real closed bar or a ~2-second stub.
     ' Trade slicing is deliberately IDENTICAL in both arms — the closed-bar question is
     ' about candles, and changing two things at once would not answer it.
+    ' tradeStoreDir — [history store H-6] Nothing ⇒ trades from backtest_data (unchanged);
+    '                otherwise trades from that directory's monthly files, e.g. the dev
+    '                history store (docs/history-data-store-spec.md §5 H-6).
     Public Shared Function Run(cfg As EngineSettings,
                                 fromUtc As DateTime, toUtc As DateTime,
                                 outputPath As String,
-                                Optional useFormingStub As Boolean = True) As RunSummary
+                                Optional useFormingStub As Boolean = True,
+                                Optional tradeStoreDir As String = Nothing) As RunSummary
         Dim warmupStart As DateTime = fromUtc.AddHours(-WarmupHours)
 
         Console.WriteLine("[Replay] Loading historical store ...")
@@ -230,7 +234,9 @@ Public Class ReplayLoop
         Dim c3m  As List(Of Candle) = HistoricalStore.LoadCandleRange(3, warmupStart, toUtc)
         Dim c5m  As List(Of Candle) = HistoricalStore.LoadCandleRange(5, warmupStart, toUtc)
         Dim c15m As List(Of Candle) = HistoricalStore.LoadCandleRange(15, warmupStart, toUtc)
-        Dim allTrades = HistoricalStore.LoadTradeRange(warmupStart, toUtc)
+        Dim allTrades = If(String.IsNullOrEmpty(tradeStoreDir),
+                           HistoricalStore.LoadTradeRange(warmupStart, toUtc),
+                           HistoricalStore.LoadTradeRangeFrom(tradeStoreDir, warmupStart, toUtc))
         Dim allFunding = HistoricalStore.LoadFundingRange(warmupStart, toUtc)
         Console.WriteLine(String.Format(
             "[Replay] Loaded: 1m={0} 3m={1} 5m={2} 15m={3} trades={4} funding={5}",

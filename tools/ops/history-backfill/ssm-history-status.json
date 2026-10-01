@@ -1,0 +1,3 @@
+{"commands":[
+"bash /opt/history/history-backfill-cloud.sh status"
+]}

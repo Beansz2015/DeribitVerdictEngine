@@ -36,6 +36,10 @@
       docs/venue-check-plan-review-2026-09-14.md §3). It runs on this machine, never on the
       box, and never changes the downloaded files' contents -- it only adds its own report,
       log and page dump beside them. -SkipVenueCheck opts out.
+      [2026-10-01] A SECOND exception of the same kind: tools/ops/history-compare.ps1 compares the
+      downloaded box store with the dev history store (docs/history-data-store-spec.md section
+      4.1) and appends to its ledger beside that store. Read-only on the download; inert until the
+      dev store exists. -SkipHistoryCompare opts out.
     - No settings editing on the box -- settings travel as the tracked file or not at all.
     - No store manipulation, in either direction -- backtest_data\ is read-only to this tool.
     - No collector-REPLACEMENT / cutover automation. §5 of the proposal is a manual, ordered
@@ -86,6 +90,10 @@ param(
 
     # fetch only: skip the post-fetch venue sample (tools/ops/venue-check.ps1).
     [switch]$SkipVenueCheck,
+
+    # fetch only: skip the post-fetch history-store comparison (tools/ops/history-compare.ps1;
+    # docs/history-data-store-spec.md section 4.1). Inert anyway until the dev store exists.
+    [switch]$SkipHistoryCompare,
 
     # restart only (docs/collector-halt-fixes-spec.md §3, CH-7): without -Yes, restart prints its
     # plan and stops with nothing changed. A seat's shell cannot answer a prompt, so the explicit
@@ -493,14 +501,27 @@ function Invoke-Fetch {
     # loudly and records every outcome, NOT_RUN included, in aws_fetch\venue_check_ledger.csv.
     if ($SkipVenueCheck) {
         Warn '-SkipVenueCheck: no venue sample recorded for this fetch'
+    } else {
+        Section 'venue check (option-A sample -- runs on THIS machine, nothing on the box)'
+        $venueTo = New-Object DateTime ($fetchStartUtc.Year, $fetchStartUtc.Month, $fetchStartUtc.Day,
+                                        $fetchStartUtc.Hour, 0, 0, [DateTimeKind]::Utc)
+        & (Join-Path $PSScriptRoot 'venue-check.ps1') -FetchFolder $localDest `
+            -ToUtc $venueTo.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
+        if ($LASTEXITCODE -eq 1) { Warn 'venue check could not even write its ledger row -- see the output above' }
+    }
+
+    # -- Step 6: the history-store comparison (docs/history-data-store-spec.md section 4.1), on
+    # THIS machine only. Inert until the dev store is installed. Like Step 5, its verdict never
+    # changes this verb's exit code; a FAIL is printed loudly and recorded in the ledger.
+    if ($SkipHistoryCompare) {
+        Warn '-SkipHistoryCompare: no history-store comparison for this fetch'
         return
     }
-    Section 'venue check (option-A sample -- runs on THIS machine, nothing on the box)'
-    $venueTo = New-Object DateTime ($fetchStartUtc.Year, $fetchStartUtc.Month, $fetchStartUtc.Day,
-                                    $fetchStartUtc.Hour, 0, 0, [DateTimeKind]::Utc)
-    & (Join-Path $PSScriptRoot 'venue-check.ps1') -FetchFolder $localDest `
-        -ToUtc $venueTo.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
-    if ($LASTEXITCODE -eq 1) { Warn 'venue check could not even write its ledger row -- see the output above' }
+    Section 'history-store comparison (box copy vs dev history store -- THIS machine only)'
+    & (Join-Path $PSScriptRoot 'history-compare.ps1') -FetchFolder $localDest `
+        -FetchStartUtc $fetchStartUtc.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
+    if ($LASTEXITCODE -eq 3) { Warn 'history-store comparison FAILED -- the stage-4 plan stops; bring the output above to the trader' }
+    elseif ($LASTEXITCODE -ne 0) { Warn 'history-store comparison did not run -- see the output above' }
 }
 
 # ===========================================================================
