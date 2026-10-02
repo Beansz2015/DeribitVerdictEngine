@@ -1,0 +1,57 @@
+{
+ "rev": "a3475137d3d707bf6b3c7911fee47027fe7fab37",
+ "rev7": "a347513",
+ "stamp_utc": "20261002T1430Z",
+ "builder": "orchestrator seat, by hand (2 live items)",
+ "note": "STATE ONLY. Live recommendations, not yet ruled.",
+ "items": [
+  {
+   "id": "docs/burst-outcome-read-rv-fixes-spec-back.md|RVF-1@a347513",
+   "question": "A genuine venue candle gap inside a population row's main window would now STOP burst outcome run 1 before any outcome is opened. What should happen if one occurs?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "STOP and ask the trader, as built",
+     "src": "docs/burst-outcome-read-rv-fixes-spec-back.md"
+    },
+    {
+     "label": "(b)",
+     "text": "pre-register now: drop rows with MainMissingBars > 0, count them per arm, and continue",
+     "src": "docs/burst-outcome-read-rv-fixes-spec-back.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "A STOP happens before any outcome is opened, so ruling it then does not contaminate run 1. (b) is cheaper at run time but adds a rule to a pre-registered read without a case in hand. Today 0 such rows exist.",
+   "question_src": "docs/burst-outcome-read-rv-fixes-spec-back.md",
+   "rationale_src": [
+    "docs/burst-outcome-read-rv-fixes-spec-back.md"
+   ],
+   "state_rev": "a3475137d3d707bf6b3c7911fee47027fe7fab37",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/burst-outcome-read-rv-fixes-spec-back.md|RVF-2@a347513",
+   "question": "Two drop reasons in the burst outcome read are not gated: 'not directional (the export should hold none)' and 'in the export, dropped for no recorded reason'. Gate them?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "leave them ungated",
+     "src": "docs/burst-outcome-read-rv-fixes-spec-back.md"
+    },
+    {
+     "label": "(b)",
+     "text": "add both as pre-outcome STOP gates",
+     "src": "docs/burst-outcome-read-rv-fixes-spec-back.md"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "Both should be 0, and a gate can only stop the run, never relabel a result.",
+   "question_src": "docs/burst-outcome-read-rv-fixes-spec-back.md",
+   "rationale_src": [
+    "docs/burst-outcome-read-rv-fixes-spec-back.md"
+   ],
+   "state_rev": "a3475137d3d707bf6b3c7911fee47027fe7fab37",
+   "provenance": "live_recommendation"
+  }
+ ]
+}
