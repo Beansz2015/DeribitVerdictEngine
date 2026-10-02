@@ -45,8 +45,9 @@
 #     a labelled result whose sign flips gains "SEAM-SENSITIVE". Run 2 is wholly post-seam: that run prints n/a.
 #
 # Modes:
-#   --counts-only  population, exclusions, export drops by reason, arm counts, the coverage column MainMissingBars and
-#                  the pre-outcome gates (printed, never stopping); EXITS before any outcome column is opened. The export
+#   --counts-only  population, exclusions, export drops by reason, arm counts, the coverage column MainMissingBars, the
+#                  information-only column MainFullWindowMissingBars and the pre-outcome gates (printed, never
+#                  stopping); EXITS before any outcome column is opened. The export
 #                  is read through a column whitelist that holds no outcome column (asserted).
 #   --selftest     synthetic books + synthetic export in a temp dir, the full pipeline, known answers asserted.
 #   (default)      the full read. Run it only as the pre-registered run 1 (--run 1) or run 2 (--run 2 --from <ts>); it
@@ -56,7 +57,11 @@
 # (exit 2, the failed checks named) before any outcome column is opened unless: every population row has
 # MainMissingBars = 0 (the main-window walk saw every 1-minute bar); analysis rows not in the power-count population = 0;
 # rows with a different arm, shadow arm or fifth = 0; export Session and AggrVelSignal mismatches = 0; "verdict differs"
-# and "Side/Tier inconsistent" drops = 0; settings.json version = the run's pinned version.
+# and "Side/Tier inconsistent" drops = 0; settings.json version = the run's pinned version. Two more (trader ruling
+# RVF-2 = (b), docs/burst-outcome-read-rv-fixes-spec-back.md): export rows dropped as "not directional" = 0, and
+# power-count rows in the export but dropped for no recorded reason = 0.
+# MainFullWindowMissingBars (ruling RVF-3 = (c)) is printed per session x arm in both modes and is NEVER a gate: it feeds
+# no STOP, no label, no filter and no outcome. It is kept out of the population rows.
 #
 # Run (from the repo root; run 1 from a worktree at the reviewed tools commit, docs/burst-outcome-read-spec.md section 6.1):
 #   dotnet build tools/ops/SwingFallbackRead/SwingFallbackRead.vbproj -c Release
@@ -108,9 +113,15 @@ OUTCOME_COLS = ["MainNetEv", "MainOutcome", "TBps", "SBps"]
 # resolution is not counted. The gate below needs it to be 0 on every row, so it can only ever reveal "all zero" or a
 # count that stops the run.
 COVERAGE_COLS = ["MainMissingBars"]
+# MainFullWindowMissingBars (trader ruling RVF-3 = (c), docs/burst-outcome-read-rv-fixes-spec-back.md): missing 1-minute
+# bars over the row's WHOLE main window, whatever the resolution; the export's last column. INFORMATION ONLY: printed per
+# session x arm in both modes, before any outcome column. It never feeds a STOP, a label, a filter or an outcome, and it
+# is never copied into a population row. Read only when the export has it (an export written before the column existed
+# prints "absent"): a missing header must not become a gate either.
+COVERAGE_INFO_COL = "MainFullWindowMissingBars"
 FORBIDDEN_IN_COUNTS = {"MainOutcome", "MainResolveMin", "MainNetEv", "C24Outcome", "C24ResolveMin",
                        "C24NetEv", "C24MissingBars", "TBps", "SBps", "TAtr", "SAtr"}
-assert not (set(SIGNAL_COLS + COVERAGE_COLS) & FORBIDDEN_IN_COUNTS), "an outcome column is in the counts whitelist"
+assert not (set(SIGNAL_COLS + COVERAGE_COLS + [COVERAGE_INFO_COL]) & FORBIDDEN_IN_COUNTS), "an outcome column is in the counts whitelist"
 
 # --- Run pins (review finding RV-2). docs/burst-outcome-read-spec.md section 6.1: run 1 reads rows before the fixed cut
 # 2026-11-25 00:00:00 UTC; run 2 reads rows from the first row after the daylight-saving-aware session-hours deploy (given
@@ -130,6 +141,10 @@ class GateStop(Exception):
         Exception.__init__(self, "pre-outcome gate(s) failed: " + ", ".join(names))
         self.cx = cx
         self.names = names
+
+# Drop and reconciliation reasons that are also gates (trader ruling RVF-2 = (b)). One string each, used in both places.
+DROP_NOT_DIRECTIONAL = "not directional (the export should hold none)"
+WHY_NO_REASON = "in the export, dropped for no recorded reason"
 
 DIRSET = {"STRONG LONG": ("LONG", "STRONG"), "LONG": ("LONG", "MEDIUM"), "WEAK LONG": ("LONG", "WEAK"),
           "STRONG SHORT": ("SHORT", "STRONG"), "SHORT": ("SHORT", "MEDIUM"), "WEAK SHORT": ("SHORT", "WEAK")}
@@ -473,8 +488,9 @@ def reference_population(cx, book):
 
 
 # ------------------------------------------------------------------ export
-def read_export(path, cols):
-    """Reads ONLY the named columns. Anything else in the file is never placed in a row."""
+def read_export(path, cols, optional=()):
+    """Reads ONLY the named columns. Anything else in the file is never placed in a row. A column in `optional` is read
+    when the header has it and skipped (no error) when it does not."""
     out = []
     with open(path, encoding="utf-8", newline="") as f:
         rd = csv.reader(f)
@@ -484,6 +500,8 @@ def read_export(path, cols):
             if c not in h:
                 raise SystemExit("export header missing %s" % c)
             ix[c] = h.index(c)
+        for c in optional:
+            if c in h: ix[c] = h.index(c)
         for x in rd:
             if not x: continue
             out.append({c: x[i] for c, i in ix.items()})
@@ -514,7 +532,7 @@ def analysis_population(cx, export_rows, book, opt):
         sess = e["Session"].upper()
         if sess != cx.session_of(ts.hour): session_mismatch += 1
         if sess == "ASIA" and ts < ASIA_ARMED: drop("ASIA before arming 2026-08-01 19:02:31", key); continue
-        if v not in DIRSET: drop("not directional (the export should hold none)", key); continue
+        if v not in DIRSET: drop(DROP_NOT_DIRECTIONAL, key); continue
         side, band = DIRSET[v]
         if e["Side"] != side or e["Tier"] != band: drop("Side/Tier inconsistent with Verdict", key); continue
         if e["AggrVelSignal"] != b["AggrVelSignal"]: sig_mismatch += 1
@@ -821,7 +839,7 @@ def run(opt):
 
     book = load_books(cx, opt.fetch, opt)
     ref, x = reference_population(cx, book)
-    export_rows = read_export(opt.export, SIGNAL_COLS + COVERAGE_COLS)
+    export_rows = read_export(opt.export, SIGNAL_COLS + COVERAGE_COLS, optional=[COVERAGE_INFO_COL])
     pop, drops, n_win, smis, sigmis = analysis_population(cx, export_rows, book, opt)
 
     cx.p()
@@ -847,7 +865,7 @@ def run(opt):
         for rr_, ks in drops.items():
             if k in ks: why.setdefault("analysis exclusion: " + rr_, []).append(k); break
         else:
-            why.setdefault("in the export, dropped for no recorded reason", []).append(k)
+            why.setdefault(WHY_NO_REASON, []).append(k)
     extra = [r for r in pop if r["key"] not in ref]
     arm_diff = sum(1 for r in pop if r["key"] in ref and (ref[r["key"]]["arm"], ref[r["key"]]["sh"], ref[r["key"]]["fifth"]) != (r["arm"], r["sh"], r["fifth"]))
     n_drop = sum(len(v) for v in why.values())
@@ -886,6 +904,22 @@ def run(opt):
     cx.p("- Coverage (MainMissingBars > 0 = the main-window walk lacks at least one 1-minute bar; a coverage column, not an outcome). Population rows, by session and arm: "
          + "  ".join("%s A %d B %d C %d O %d" % (s, miss[(s, "A")], miss[(s, "B")], miss[(s, "C")], miss[(s, "O")]) for s in SESS_ORDER)
          + ". Total %d; MainMissingBars not parseable: %d." % (n_miss, n_unparsed))
+    # ---- full-window coverage (RVF-3 (c)): INFORMATION ONLY, NOT A GATE. Looked up from the export rows by Timestamp and
+    # never copied into a population row; it is printed here and returned in info for the selftest, and nothing else
+    # reads it: no gate below, no label, no filter, no outcome.
+    has_fw = bool(export_rows) and COVERAGE_INFO_COL in export_rows[0]
+    fw_miss = None
+    if has_fw:
+        fw = {e["Timestamp"]: tryi(e[COVERAGE_INFO_COL]) for e in export_rows}
+        fw_miss = {(s, a): sum(1 for r in pop if r["s"] == s and r["arm"] == a and (fw[r["key"]] or 0) > 0) for s in SESS_ORDER for a in "ABCO"}
+        fw_n = sum(1 for r in pop if fw[r["key"]] is not None and fw[r["key"]] > 0)
+        fw_bars = sum(fw[r["key"]] for r in pop if fw[r["key"]] is not None and fw[r["key"]] > 0)
+        fw_unparsed = sum(1 for r in pop if fw[r["key"]] is None)
+        cx.p("- Full-window coverage, information only, not a gate (%s > 0 = the row's whole main window lacks at least one 1-minute bar, counted past the resolving bar). Population rows, by session and arm: " % COVERAGE_INFO_COL
+             + "  ".join("%s A %d B %d C %d O %d" % (s, fw_miss[(s, "A")], fw_miss[(s, "B")], fw_miss[(s, "C")], fw_miss[(s, "O")]) for s in SESS_ORDER)
+             + ". Total %d rows, %d missing bars; not parseable: %d." % (fw_n, fw_bars, fw_unparsed))
+    else:
+        cx.p("- Full-window coverage, information only, not a gate: column %s absent from this export (written before the column existed)." % COVERAGE_INFO_COL)
 
     # ---- pre-outcome gates (RV-1, RV-2). Printed in both modes; full mode STOPs on any FAIL, before run_full.
     pin_v = RUN_SETTINGS_VERSION.get(run_id or "1")
@@ -899,6 +933,11 @@ def run(opt):
          "export rows dropped as 'verdict differs between export and fetch book' = %d (must be 0)" % len(drops.get("verdict differs between export and fetch book", []))),
         ("side_tier_inconsistent", len(drops.get("Side/Tier inconsistent with Verdict", [])) == 0,
          "export rows dropped as 'Side/Tier inconsistent with Verdict' = %d (must be 0)" % len(drops.get("Side/Tier inconsistent with Verdict", []))),
+        # RVF-2 = (b): both should be 0; both can only stop, never relabel
+        ("not_directional", len(drops.get(DROP_NOT_DIRECTIONAL, [])) == 0,
+         "export rows dropped as '%s' = %d (must be 0)" % (DROP_NOT_DIRECTIONAL, len(drops.get(DROP_NOT_DIRECTIONAL, [])))),
+        ("no_recorded_reason", len(why.get(WHY_NO_REASON, [])) == 0,
+         "power-count rows %s = %d (must be 0)" % (WHY_NO_REASON, len(why.get(WHY_NO_REASON, [])))),
         # Run 2 has no pinned version yet, so this gate FAILS for run 2 until the run-2 rider (RV-4) pins one: run 2 cannot
         # read outcomes under a settings version nobody pre-registered.
         ("settings_version", pin_v is not None and cx.cfg["version"] == pin_v,
@@ -910,7 +949,7 @@ def run(opt):
         cx.p("  - %s %s: %s" % ("PASS" if ok else "FAIL", name, text))
     failed = [name for name, ok, _ in gates if not ok]
     info = {"pop": pop, "ref": ref, "refx": x, "drops": drops, "why": why, "extra": len(extra), "arm_diff": arm_diff,
-            "miss": miss, "gates_failed": failed}
+            "miss": miss, "fw_miss": fw_miss, "gates_failed": failed}
     if opt.counts_only:
         cx.p()
         cx.p("COUNTS ONLY: exiting before any outcome column is opened.")
@@ -969,7 +1008,7 @@ def st_build(tmp, null_case, seed, flip=False, const=False):
         e = {"Timestamp": b["Timestamp"], "Session": sess, "Side": side, "Tier": band, "Verdict": b["Verdict"], "Price": b["Price"],
              "Atr": b["ATR"], "AggrVelSignal": sig_, "MaxScore": "19", "EffectiveLongScore": str(el), "EffectiveShortScore": str(es),
              "InstanceId": "synthetic01", "TBps": "%.4f" % (2 * atr / price * 1e4), "SBps": "%.4f" % (1.5 * atr / price * 1e4),
-             "MainMissingBars": "0"}
+             "MainMissingBars": "0", COVERAGE_INFO_COL: "0"}
         return b, e
     for di, day in enumerate(days):
         for s in SESS_ORDER:
@@ -1039,14 +1078,14 @@ def st_build(tmp, null_case, seed, flip=False, const=False):
     write_book("analysis_log.csv.116col-00000000.20260920_000000.bak", rot_rows, rot_hdr)
     write_book("analysis_log.csv", live, BOOK_HDR)
     ex = os.path.join(tmp, "export.csv")
-    ehdr = SIGNAL_COLS + COVERAGE_COLS + OUTCOME_COLS
+    ehdr = SIGNAL_COLS + COVERAGE_COLS + OUTCOME_COLS + [COVERAGE_INFO_COL]   # the info column last, as the real export
     with open(ex, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, lineterminator="\n"); w.writerow(ehdr)
         for e in export_rows: w.writerow([e[c] for c in ehdr])
     ex_sig = os.path.join(tmp, "export-signal-only.csv")   # no outcome column at all: --counts-only must still run
     with open(ex_sig, "w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f, lineterminator="\n"); w.writerow(SIGNAL_COLS + COVERAGE_COLS)
-        for e in export_rows: w.writerow([e[c] for c in SIGNAL_COLS + COVERAGE_COLS])
+        w = csv.writer(f, lineterminator="\n"); w.writerow(SIGNAL_COLS + COVERAGE_COLS + [COVERAGE_INFO_COL])
+        for e in export_rows: w.writerow([e[c] for c in SIGNAL_COLS + COVERAGE_COLS + [COVERAGE_INFO_COL]])
     return fetch, ex, ex_sig, expect
 
 
@@ -1168,6 +1207,11 @@ def selftest_gates(real_root, check, resamples):
             ("side_tier_inconsistent", "export", lambda d: d.update(Tier=other_tier), None),
             ("arm_diff", "export", lambda d: d.update(Atr=other_atr), None),
             ("extra", "books", lambda d: d.update(PlacedTargetLong="0.0"), None),
+            # RVF-2 = (b). A NO TRADE row in the export and the books (so "verdict differs" cannot fire first)
+            ("not_directional", "both", lambda d: d.update(Verdict="NO TRADE"), None),
+            # RVF-2 = (b). No data shape reaches this bucket: analysis_population records a reason for every row it
+            # drops. The variant injects the defect the gate exists for: a population step that silently loses a row.
+            ("no_recorded_reason", "patch", None, None),
             ("settings_version", None, None, RUN_SETTINGS_VERSION["1"] + 1),
         ]
         for name, where, edit, version in variants:
@@ -1175,25 +1219,40 @@ def selftest_gates(real_root, check, resamples):
             shutil.copytree(os.path.dirname(fetch0), vt)
             fetch, ex = os.path.join(vt, "fetch"), os.path.join(vt, "export.csv")
             n_ed = 0
-            if where == "export":
+            if where in ("export", "both"):
                 n_ed = st_edit_csv(ex, ts, edit)
-            elif where == "books":
+            if where in ("books", "both"):
                 for bp in book_names(fetch):
                     n_ed += st_edit_csv(bp, ts, edit)
-            rt = st_root(vt, real_root, version if version is not None else RUN_SETTINGS_VERSION["1"])
-            base = dict(root=rt, export=ex, fetch=fetch, pooled=None, from_=None, resamples=resamples, seed=RUN_SEED, selftest_quiet=True)
-            got = None
+            real_ap = globals()["analysis_population"]
+            if where == "patch":
+                def lossy_ap(cx_, export_rows_, book_, opt_, _real=real_ap, _ts=ts):
+                    pop_, drops_, n_win_, smis_, sigmis_ = _real(cx_, export_rows_, book_, opt_)
+                    return [r for r in pop_ if r["key"] != _ts], drops_, n_win_, smis_, sigmis_
+                globals()["analysis_population"] = lossy_ap
+                n_ed = 1
             try:
-                quiet_run(argparse.Namespace(**dict(base, run="1", cut_before=RUN1_CUT, counts_only=False)))
-            except GateStop as g:
-                got = g.names
-            check(got == [name], "gate %s: full mode STOPs naming exactly [%s] before any outcome column (edited %d rows; got %s)" % (name, name, n_ed, got))
-            cx, info, res_ = quiet_run(argparse.Namespace(**dict(base, run=None, cut_before=None, counts_only=True)))
+                rt = st_root(vt, real_root, version if version is not None else RUN_SETTINGS_VERSION["1"])
+                base = dict(root=rt, export=ex, fetch=fetch, pooled=None, from_=None, resamples=resamples, seed=RUN_SEED, selftest_quiet=True)
+                got = None
+                try:
+                    quiet_run(argparse.Namespace(**dict(base, run="1", cut_before=RUN1_CUT, counts_only=False)))
+                except GateStop as g:
+                    got = g.names
+                check(got == [name], "gate %s: full mode STOPs naming exactly [%s] before any outcome column (edited %d rows; got %s)" % (name, name, n_ed, got))
+                cx, info, res_ = quiet_run(argparse.Namespace(**dict(base, run=None, cut_before=None, counts_only=True)))
+            finally:
+                globals()["analysis_population"] = real_ap
             check(res_ is None and info["gates_failed"] == [name] and any(ln.startswith("  - FAIL %s:" % name) for ln in cx.out),
                   "gate %s: counts-only prints FAIL %s and does not stop (got %s)" % (name, name, info["gates_failed"]))
             if name == "missing_bars":
                 check(info["miss"][("NY", "A")] == 1 and sum(info["miss"].values()) == 1,
                       "gate missing_bars: the coverage line counts the row under NY arm A only")
+            if name == "not_directional":
+                check(len(info["drops"].get(DROP_NOT_DIRECTIONAL, [])) == 1, "gate not_directional: exactly the edited row is dropped as not directional")
+            if name == "no_recorded_reason":
+                check(info["why"].get(WHY_NO_REASON) == [ts], "gate no_recorded_reason: exactly the silently lost row is counted (got %s)" % info["why"].get(WHY_NO_REASON))
+        selftest_coverage_info(tmp, fetch0, ts, real_root, check)
         # full mode refuses to start unpinned, even when a caller bypasses main()
         rt = st_root(os.path.join(tmp, "base"), real_root, RUN_SETTINGS_VERSION["1"])
         for run_id, cut, why in ((None, None, "no --run"), ("1", None, "--run 1 without its cut")):
@@ -1214,6 +1273,66 @@ def selftest_gates(real_root, check, resamples):
         check(got is not None and "settings_version" in got, "gate settings_version: --run 2 STOPs while run 2 has no pinned version (got %s)" % got)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def selftest_coverage_info(tmp, fetch0, ts, real_root, check):
+    """RVF-3 (c): MainFullWindowMissingBars is information only. One NY arm-A row gets a full-window gap after its
+    resolution (MainFullWindowMissingBars 5) with MainMissingBars 0. Failing inputs: a gate on the column STOPs full mode
+    or lists a failed gate; a filter or an outcome fed by it changes a line of the full read against the unedited
+    baseline; a missing print or a mis-binned count fails the coverage-line checks; a hard requirement on the header
+    fails the "absent" run."""
+    print("\n==== SELFTEST case: full-window coverage column is information only (RVF-3 (c)) ====")
+    rs = 200   # equality against the baseline, not a statistic: a small resample count is enough and keeps it fast
+    outs = {}
+    for tag, edit in (("base", None), ("gap", lambda d: d.update(**{COVERAGE_INFO_COL: "5"}))):
+        vt = os.path.join(tmp, "cov_" + tag)
+        shutil.copytree(os.path.dirname(fetch0), vt)
+        fetch, ex = os.path.join(vt, "fetch"), os.path.join(vt, "export.csv")
+        if edit is not None:
+            n_ed = st_edit_csv(ex, ts, edit)
+            check(n_ed == 1, "coverage info: one export row edited (MainFullWindowMissingBars 5, MainMissingBars 0)")
+        rt = st_root(vt, real_root, RUN_SETTINGS_VERSION["1"])
+        base = dict(root=rt, export=ex, fetch=fetch, pooled=None, from_=None, resamples=rs, seed=RUN_SEED, selftest_quiet=True)
+        cx, info, _ = quiet_run(argparse.Namespace(**dict(base, run=None, cut_before=None, counts_only=True)))
+        if tag == "gap":
+            check(info["gates_failed"] == [] and info["fw_miss"] is not None and info["fw_miss"][("NY", "A")] == 1 and sum(info["fw_miss"].values()) == 1,
+                  "coverage info: counts-only passes every gate and counts the row under NY arm A only (got gates %s)" % info["gates_failed"])
+            line = [ln for ln in cx.out if ln.startswith("- Full-window coverage, information only, not a gate")]
+            check(len(line) == 1 and "Total 1 rows, 5 missing bars" in line[0], "coverage info: counts-only prints the labelled line (got %s)" % line)
+            check(all(r["missing"] == 0 for r in info["pop"]) and not any(COVERAGE_INFO_COL in r or "fw" in r for r in info["pop"]),
+                  "coverage info: MainMissingBars stays 0 and the column is not copied into a population row")
+        try:
+            cx, info, res_ = quiet_run(argparse.Namespace(**dict(base, run="1", cut_before=RUN1_CUT, counts_only=False)))
+            outs[tag] = (cx.out, info, res_)
+        except GateStop as g:
+            outs[tag] = None
+            check(False, "coverage info (%s): full mode STOPPED on %s" % (tag, g.names))
+    if outs.get("base") and outs.get("gap"):
+        (ob, ib, rb), (og, ig, rg) = outs["base"], outs["gap"]
+        check(ig["gates_failed"] == [] and rg is not None, "coverage info: full mode does not STOP on a full-window gap and reads on")
+        keep = lambda o: [ln for ln in o if not ln.startswith("- Export `") and not ln.startswith("- Full-window coverage")]
+        diff = [(a, b) for a, b in zip(keep(ob), keep(og)) if a != b]
+        check(len(ob) == len(og) and not diff and [r["key"] for r in ib["pop"]] == [r["key"] for r in ig["pop"]],
+              "coverage info: the full read is line-for-line identical to the unedited baseline, outside the export MD5 and the coverage line (%d lines; first diff %s)"
+              % (len(og), diff[:1]))
+    # an export written before the column existed: read on, print "absent", gate nothing
+    vt = os.path.join(tmp, "cov_absent")
+    shutil.copytree(os.path.dirname(fetch0), vt)
+    ex = os.path.join(vt, "export.csv")
+    with open(ex, encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    ic = rows[0].index(COVERAGE_INFO_COL)
+    with open(ex, "w", encoding="utf-8", newline="") as f:
+        csv.writer(f, lineterminator="\n").writerows([r[:ic] + r[ic + 1:] for r in rows])
+    rt = st_root(vt, real_root, RUN_SETTINGS_VERSION["1"])
+    try:
+        cx, info, _ = quiet_run(argparse.Namespace(root=rt, export=ex, fetch=os.path.join(vt, "fetch"), pooled=None, from_=None, resamples=rs,
+                                                   seed=RUN_SEED, selftest_quiet=True, run=None, cut_before=None, counts_only=True))
+        ok, got = (info["gates_failed"] == [] and info["fw_miss"] is None
+                   and any(ln.startswith("- Full-window coverage, information only, not a gate: column") for ln in cx.out)), info["gates_failed"]
+    except SystemExit as e_:
+        ok, got = False, "refused: %s" % e_
+    check(ok, "coverage info: an export without the column runs, prints 'absent' and fails no gate (got %s)" % got)
 
 
 def selftest(root, resamples):

@@ -10,6 +10,9 @@ Option Infer On
 ' the chronological half (the stability read's split rule) and the logged context columns by header name.
 ' The analysis runs in tools/ops/medium_tier_diagnosis.py, which joins this file to
 ' <cache>/rescore-attribution.csv (--mode rescore) by Timestamp.
+' The LAST column, MainFullWindowMissingBars, is the count of missing 1-minute bars over the row's whole main window,
+' whatever the resolution (MainMissingBars stops counting at the resolving bar). Information only: burst outcome read
+' ruling RVF-3 (c), docs/burst-outcome-read-rv-fixes-spec-back.md. Appended last so every column before it is unchanged.
 '
 ' Run (from the repo root):
 '   dotnet build tools/ops/SwingFallbackRead/SwingFallbackRead.vbproj -c Release
@@ -49,6 +52,7 @@ Partial Module SwingFallbackReadProgram
         For Each c In DxRawCols
             sb.Append(","c).Append(c)
         Next
+        sb.Append(",MainFullWindowMissingBars")   ' information only (RVF-3 (c)); keep it LAST
         sb.AppendLine()
         Dim nMissingRaw As Integer = 0
         For Each s In sigs.OrderBy(Function(x) x.Ts)
@@ -66,6 +70,7 @@ Partial Module SwingFallbackReadProgram
             For Each c In DxRawCols
                 f.Add(RsS(x, c).Replace(","c, ";"c))
             Next
+            f.Add(wm.WindowMissingBars.ToString(Inv))
             sb.AppendLine(String.Join(",", f))
         Next
         File.WriteAllText(outCsv, sb.ToString(), New UTF8Encoding(False))

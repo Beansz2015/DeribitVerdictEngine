@@ -99,7 +99,11 @@ Public Module SwingFallbackReadProgram
         Public ResolveMin As Double        ' signal -> resolving bar close (or cap), minutes
         Public MarkBps As Double           ' open only: signed mark at the last bar close
         Public FundingBps As Double        ' funding COST to the position (+ = paid)
-        Public MissingBars As Integer
+        Public MissingBars As Integer      ' missing bars the walk met, up to its resolving bar (it stops there)
+        ' Missing bars over the WHOLE window [firstClose, lastClose], whatever the resolution. Information only
+        ' (burst outcome read ruling RVF-3 (c), docs/burst-outcome-read-rv-fixes-spec-back.md): written by
+        ' --mode diagexport as its last column; no statistic, gate or outcome reads it.
+        Public WindowMissingBars As Integer
         Public BarsSeen As Integer
     End Class
 
@@ -811,6 +815,14 @@ Public Module SwingFallbackReadProgram
             End If
             t = t.AddMinutes(1)
         End While
+        w.WindowMissingBars = w.MissingBars
+        If resolved Then   ' count the rest of the window too, after the resolving bar (information only, RVF-3 (c))
+            Dim u As DateTime = endT.AddMinutes(1)
+            While u <= lastClose
+                If Not bars.ContainsKey(u) Then w.WindowMissingBars += 1
+                u = u.AddMinutes(1)
+            End While
+        End If
         If Not resolved Then
             w.Outcome = 0
             If Not Double.IsNaN(lastC) Then w.MarkBps = If(s.IsLong, 1.0, -1.0) * (lastC - s.Price) / s.Price * 10000.0
