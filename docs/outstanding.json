@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 15 commits ahead of origin, docs and tools only (no engine code)",
+      "meaning": "Push master — 17 commits ahead of origin, docs and tools only (no engine code)",
       "since": "2026-10-02"
     },
     {
