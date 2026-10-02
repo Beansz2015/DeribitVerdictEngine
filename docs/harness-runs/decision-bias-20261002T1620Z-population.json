@@ -1,0 +1,77 @@
+{
+ "rev": "d59e6fba2c998eddf2947fd9344905501a48662e",
+ "rev7": "d59e6fb",
+ "stamp_utc": "20261002T1620Z",
+ "builder": "orchestrator seat, by hand",
+ "note": "STATE ONLY. Live recommendations.",
+ "items": [
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-9-orch@d59e6fb",
+   "question": "Multiplicity control for a pre-registered study with one primary test (H1) and two secondary tests (H2, H3). The study cannot run until each arm reaches n >= 100 (expected 2028), so power is not a constraint today.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "H1 alone at alpha 0.05; H2 and H3 Holm at 0.05 as a secondary family (familywise error up to about 0.10 overall)",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "Holm across all three tests (familywise error capped at 0.05)",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "Bonferroni across all three",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "(b) caps the familywise error at 0.05 over all three. The only argument for (a) was power on the primary, and the run cannot open before n >= 100 in each arm anyway. (c) is uniformly weaker than (b) at the same guarantee.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "d59e6fba2c998eddf2947fd9344905501a48662e",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-10-orch@d59e6fb",
+   "question": "A pre-registered liquidation-cluster x logged-OFI-flip study has only 28 events in 3 months of logged data: unreadable until about 2028. What now?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "keep the OFI study sealed; re-count at each store refresh; run when each arm reaches 100",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(a)+(e)",
+     "text": "(a), plus a separate pre-registered study using trade-flow (aggressor imbalance) flips from the 21-month trade store, restricted to 2025-01-01 -> 2026-07-02 so the sealed OFI events stay outcome-blind",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "run now; every label NOT READABLE",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "redesign the OFI study for power now (lower threshold)",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "close the logged-era study",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a)+(e)",
+   "rationale": "(a) keeps the OFI events outcome-blind. (e) gives a readable answer on a close cousin signal within weeks, from 18 months the OFI study can never use, without touching its sealed span. (b) is uninterpretable and unseals the span; (c) breaks the ruled thresholds; (d) discards a free accrual check.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "d59e6fba2c998eddf2947fd9344905501a48662e",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

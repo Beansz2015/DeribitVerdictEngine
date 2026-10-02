@@ -1,0 +1,70 @@
+{
+    "rev":  "d59e6fba2c998eddf2947fd9344905501a48662e",
+    "population":  "docs/harness-runs/decision-bias-20261002T1620Z-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20261002T1620Z-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "jev_model":  "requested=[jev-latest x10] resolved=[jev-1.13.0 x10] run_utc=2026-10-02T15:34:26Z",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  10,
+    "usage_input_tokens":  8690,
+    "wall_time_sec":  3.44,
+    "items":  [
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-9-orch@d59e6fb",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.618,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.6,
+                                                       0.64,
+                                                       0.64,
+                                                       0.63,
+                                                       0.58
+                                                   ],
+                      "usage_input_tokens":  4115,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-10-orch@d59e6fb",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.852,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.85,
+                                                       0.87,
+                                                       0.84,
+                                                       0.85,
+                                                       0.85
+                                                   ],
+                      "usage_input_tokens":  4575,
+                      "seat_label":  "no_richer_option"
+                  }
+              ]
+}
