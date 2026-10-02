@@ -298,7 +298,7 @@ All are tools-only and undone by one revert. None touches scoring, `settings.jso
 
 ## 3. Queued for the trader (not decided)
 
-> ✅ **RULED 2026-10-02 (trader):** `RVF-1` = **(a)** keep the STOP · `RVF-2` = **(b)** add both gates (a small tools follow-up, not yet built). ✅ **`RVF-3` = (c) RULED 2026-10-02 (trader)** — the gate stays on outcome-relevant bars; a full-window coverage column is added as information only (counts-only prints it per session × arm; never a gate). Built together with the `RVF-2` gates in one small follow-up, held until the A4 session-1 agent finishes. History: harness 6 (decision-bias tripwire) flagged the orchestrator's (a) read as `gives_up_for_economy`, 5 of 5 samples ([`harness-runs/decision-bias-20261002T1520Z-jev.json`](harness-runs/decision-bias-20261002T1520Z-jev.json)). The orchestrator's proposed option (c): keep the gate on outcome-relevant bars (a), and add a full-window coverage column as information only, printed in counts-only and never a gate.
+> ✅ **RULED 2026-10-02 (trader):** `RVF-1` = **(a)** keep the STOP · `RVF-2` = **(b)** add both gates (✅ built in `84dd38d`, with `RVF-3` (c); see section 6 of this doc). ✅ **`RVF-3` = (c) RULED 2026-10-02 (trader)** — the gate stays on outcome-relevant bars; a full-window coverage column is added as information only (counts-only prints it per session × arm; never a gate). Built together with the `RVF-2` gates in one small follow-up, held until the A4 session-1 agent finishes. History: harness 6 (decision-bias tripwire) flagged the orchestrator's (a) read as `gives_up_for_economy`, 5 of 5 samples ([`harness-runs/decision-bias-20261002T1520Z-jev.json`](harness-runs/decision-bias-20261002T1520Z-jev.json)). The orchestrator's proposed option (c): keep the gate on outcome-relevant bars (a), and add a full-window coverage column as information only, printed in counts-only and never a gate.
 
 | ID (this doc) | Question | Options | My read (a hypothesis) |
 |---|---|---|---|
@@ -329,3 +329,150 @@ Riders carried, unchanged: `RV-4` (review finding 4: `--session` filter and the 
 - **The other `SwingFallbackRead` modes.** `census` and `stability` call `LoadBarsAsync` (they branch after it, `SwingFallbackRead.vb` "---- walks"), so they also re-fetch partial weeks now; on a complete cache the code path is the one `H-2` covers. `liqflag`, `pocgate` and `rescore` return before `LoadBarsAsync` and are untouched. Read from the code; none was run.
 - **The solution build.** Only `SwingFallbackRead.vbproj` was built; the gate builds its own harness.
 - **Python `float()` vs .NET parsing on `nan`/`inf`.** Carried from the build packet. Not checked.
+
+---
+
+## 6. Follow-up: `RVF-2` and `RVF-3` (c) (built 2026-10-02 UTC)
+
+**Rulings built:** `RVF-2` = (b) and `RVF-3` = (c), from the RULED box in this doc's "Queued for the trader" section. **Start commit:** `d59e6fb`. **Tools commit:** `84dd38d`. **Docs commit:** this section and the run-1 procedure box in [`docs/burst-outcome-read-spec.md`](burst-outcome-read-spec.md) §6.1. **Builder:** Opus 5.5, medium.
+
+⛔ No real outcome was printed, aggregated or read. Real-data runs: `SwingFallbackRead` default mode and `diagexport` (diff and MD5 only), `diagexport` console tails, the power count, `--counts-only`. Full mode ran on synthetic data only.
+
+### 6.1 What changed
+
+| Ruling | Change | File |
+|---|---|---|
+| `RVF-2` (b) | Two more pre-outcome gates, ten in all. `not_directional`: export rows dropped as "not directional (the export should hold none)" = 0. `no_recorded_reason`: power-count rows in the export, dropped for no recorded reason = 0. Full mode STOPs on them like the other eight. Counts-only prints them and goes on | `tools/ops/burst_outcome_read.py` |
+| `RVF-3` (c), export | `WalkResult.WindowMissingBars`: after a resolution, the walk counts the missing bars from the resolving bar to the window end too. `MainMissingBars` is unchanged. `diagexport` appends it as the NEW LAST column `MainFullWindowMissingBars` | `tools/ops/SwingFallbackRead/SwingFallbackRead.vb`, `MediumTierDiagnosisExport.vb` |
+| `RVF-3` (c), read | The column is read as an optional column and looked up by Timestamp. It is never copied into a population row. Both modes print it per session × arm, labelled "information only, not a gate", before any outcome column. It feeds no gate, label, filter or outcome | `tools/ops/burst_outcome_read.py` |
+
+### 6.2 Handles (all run at `84dd38d`; actual output)
+
+| Rank | Handle | Result |
+|---|---|---|
+| 1 | `H-7` `python tools/ops/burst_outcome_read.py --selftest` (10,000 resamples) | ✅ `SELFTEST PASSED (0 failed)`, 181 PASS (168 before) |
+| 2 | `E-2` six mutants (scratch copies outside the repo, `--resamples 200`) | ✅ 6 of 6 red |
+| 3 | `H-8` default mode, `d59e6fb` binary vs `84dd38d` binary | ✅ only `Run at` differs |
+| 4 | `H-9` `diagexport`, same pair | ✅ one appended header column; with it stripped, byte MD5 = the old file |
+| 5 | `H-10` power count vs counts-only `--run 1`, fresh empty cache | ✅ tables equal; all ten gates PASS; the new line prints |
+| 6 | `H-11` build and `verify-gate.ps1` | ✅ 0 warnings / 0 errors; `GATE PASSED` |
+
+**`H-7` — selftest.** Script MD5 `ca7b574bf189462a1328633f76dee1a2` (the committed file). The four bootstrap cases print BO-H1 lines identical to this doc's `H-1` paste (for example `ASIA BO-H1 FULL d = +5.5 [+4.4, +6.6]  Holm CI [+4.1, +6.9]  label: CONFIRMED (d > 0)`). New lines (actual):
+
+```
+PASS  gate not_directional: full mode STOPs naming exactly [not_directional] before any outcome column (edited 2 rows; got ['not_directional'])
+PASS  gate not_directional: counts-only prints FAIL not_directional and does not stop (got ['not_directional'])
+PASS  gate not_directional: exactly the edited row is dropped as not directional
+PASS  gate no_recorded_reason: full mode STOPs naming exactly [no_recorded_reason] before any outcome column (edited 1 rows; got ['no_recorded_reason'])
+PASS  gate no_recorded_reason: counts-only prints FAIL no_recorded_reason and does not stop (got ['no_recorded_reason'])
+PASS  gate no_recorded_reason: exactly the silently lost row is counted (got ['2026-08-03 15:00:07'])
+==== SELFTEST case: full-window coverage column is information only (RVF-3 (c)) ====
+PASS  coverage info: one export row edited (MainFullWindowMissingBars 5, MainMissingBars 0)
+PASS  coverage info: counts-only passes every gate and counts the row under NY arm A only (got gates [])
+PASS  coverage info: counts-only prints the labelled line (got [...NY A 1 B 0 C 0 O 0. Total 1 rows, 5 missing bars; not parseable: 0.])
+PASS  coverage info: MainMissingBars stays 0 and the column is not copied into a population row
+PASS  coverage info: full mode does not STOP on a full-window gap and reads on
+PASS  coverage info: the full read is line-for-line identical to the unedited baseline, outside the export MD5 and the coverage line (202 lines; first diff [])
+PASS  coverage info: an export without the column runs, prints 'absent' and fails no gate (got [])
+SELFTEST PASSED (0 failed)
+```
+
+**`E-2` — mutants.** Instrument: a scratch `mutate.py` in the session scratchpad, not committed. Each mutant is the committed script with one exact-string edit, asserted to match once. Actual:
+
+```
+source MD5 ca7b574bf189462a1328633f76dee1a2
+n1_not_directional_gate_removed: SELFTEST FAILED (2 failed)  FAIL lines=2  exit=1
+n2_no_recorded_reason_gate_removed: SELFTEST FAILED (2 failed)  FAIL lines=2  exit=1
+n3_info_column_becomes_a_gate: SELFTEST FAILED (2 failed)  FAIL lines=2  exit=1
+    FAIL  coverage info (gap): full mode STOPPED on ['full_window']
+n4_info_column_filters_the_outcome_path: SELFTEST FAILED (1 failed)  FAIL lines=1  exit=1
+    FAIL  coverage info: the full read is line-for-line identical to the unedited baseline, ... first diff [('| NY | A | 400 | ...', '| NY | A | 399 | ...
+n5_info_column_header_required: SELFTEST FAILED (1 failed)  FAIL lines=1  exit=1
+    FAIL  coverage info: an export without the column runs, prints 'absent' and fails no gate (got refused: export header missing MainFullWindowMissingBars)
+n6_missing_bars_gate_reads_full_window: SELFTEST FAILED (6 failed)  FAIL lines=6  exit=1
+```
+
+| Mutant | Edit |
+|---|---|
+| `n1` | `not_directional` gate always PASS |
+| `n2` | `no_recorded_reason` gate always PASS |
+| `n3` | a non-zero full-window count is added to the failed gates |
+| `n4` | rows with a full-window gap are filtered out of `run_full` |
+| `n5` | the column is a required header |
+| `n6` | the `missing_bars` gate reads the full-window column instead of `MainMissingBars` |
+
+⚠ `n4` is the only mutant on the outcome path. Its diff line shows a synthetic arm count (400 vs 399), not a real outcome.
+
+**`H-8` — default-mode parity.** Old binary: `git archive d59e6fb` (the project and its linked `Core/`, `analysis/` and root files) built in the scratchpad. New binary: `dotnet build tools/ops/SwingFallbackRead/SwingFallbackRead.vbproj -c Release -t:Rebuild`. Each binary had its own copy of `backtest_data/burst-outcome-read` weeks 2026-07-06 → 2026-09-21 plus its funding file. Command: `dotnet <dll> --root . --fetch aws_fetch/20260924-084613 --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv --cache <copy> --out <file>`. Actual:
+
+```
+3c3
+< - Run at (UTC): 2026-10-02 15:46:40
+---
+> - Run at (UTC): 2026-10-02 15:46:43
+diff exit=1
+   507 .../def-old.md
+   507 .../def-new.md
+```
+
+**`H-9` — `diagexport` parity.** The same pair, same fetch and caches, with `--mode diagexport`. Header diff (`head -1 | tr -d '\r' | tr ',' '\n'`) and a scratch check that strips the last field of every line (actual):
+
+```
+55a56
+> MainFullWindowMissingBars
+219dac4a5ecbb065554f4e4d61f0421d *.../dx-old.csv
+94e60c301f7a2a4dc99203a5e26e3e74 *.../dx-new.csv
+rows old/new: 10521 10521 cols old/new: 55 56
+new header minus last == old header: True ; appended: ['MainFullWindowMissingBars']
+every row: new[:-1] == old: True
+new with last field stripped, byte MD5: 219dac4a5ecbb065554f4e4d61f0421d old MD5: 219dac4a5ecbb065554f4e4d61f0421d
+```
+
+`219dac4a…` is also this doc's `H-2b` MD5. Consumers, checked by reading the code: `tools/ops/medium_tier_diagnosis.py` and `tools/ops/q1d_tier_geometry.py` read the export with `csv.DictReader` (by name). Their strict field-count readers read `rescore-attribution.csv`, not this export. So an appended column breaks neither. Neither was run.
+
+**`H-10` — power count vs counts-only, fresh empty cache.** A new, empty folder (0 files before, 17 after). `diagexport` on `aws_fetch/20260928-121255`: `Population rows: 11001. Rows without a logged row (must be 0): 0.` With its last field stripped, the export's MD5 is `3fc4f716012481cb7132e9583cde5d18`, equal to `backtest_data/burst-outcome-read/diagnosis-rows-20260928.csv` and to this doc's `H-3`. Then the power count (`-FetchFolder aws_fetch\20260928-121255 -RunDate 2026-11-02`) and `--counts-only --run 1` on that export. Table check by the same scratch cutter as `H-3` (actual):
+
+```
+lines: power 19 2a 19 2b 19 2c 19
+2a == fresh power count section 1: True
+2b == fresh power count section 1: True
+2c rows with any non-zero count: 0
+```
+
+Counts-only lines (actual):
+
+```
+- Coverage (MainMissingBars > 0 = ...). Population rows, by session and arm: ASIA A 0 B 0 C 0 O 0  LONDON A 0 B 0 C 0 O 0  NY A 0 B 0 C 0 O 0. Total 0; MainMissingBars not parseable: 0.
+- Full-window coverage, information only, not a gate (MainFullWindowMissingBars > 0 = the row's whole main window lacks at least one 1-minute bar, counted past the resolving bar). Population rows, by session and arm: ASIA A 0 B 0 C 0 O 0  LONDON A 0 B 0 C 0 O 0  NY A 0 B 0 C 0 O 0. Total 0 rows, 0 missing bars; not parseable: 0.
+  - PASS not_directional: export rows dropped as 'not directional (the export should hold none)' = 0 (must be 0)
+  - PASS no_recorded_reason: power-count rows in the export, dropped for no recorded reason = 0 (must be 0)
+  - PASS settings_version: settings.json version 69, pinned 69 (run 1)
+COUNTS ONLY: exiting before any outcome column is opened.
+```
+
+- The other eight gates read PASS, as in `H-3`.
+- Counts-only, `d59e6fb` script vs `84dd38d` script, same export (actual diff): `Run at`, the new full-window line and the two new gate lines. Nothing else moved.
+- On the old export (no new column), the new script prints `column MainFullWindowMissingBars absent from this export (written before the column existed)`. Its output equals the fresh-export output once `Run at`, the export line and that line are dropped (`diff exit=0`).
+
+**`H-11` — build and gate.** `dotnet build tools/ops/SwingFallbackRead/SwingFallbackRead.vbproj -c Release -t:Rebuild`: `0 Warning(s)`, `0 Error(s)`. `powershell -NoProfile -File tools/checks/verify-gate.ps1` after `84dd38d` (tail): `OK no snapshot/card drift detected` · `OK no engine-path change` · `OK AnalysisLogger.vb not in the changed set` · `GATE PASSED`.
+
+### 6.3 Decisions I made (auto-proceeded, one line each)
+
+All of them are tools-only. One revert undoes each.
+
+| # | Decision | Options | Pick | Why |
+|---|---|---|---|---|
+| F1 | Export without the new column | (a) refuse (header required) · (b) read on and print "absent" | **(b)** | Three-step test, step 3: (a) records no more. It only turns the information column into a STOP on the export's age, and the `RVF-3` ruling forbids a gate. Run 1 makes a fresh export, so the column is there. Mutant `n5` guards the choice |
+| F2 | How the selftest reaches `no_recorded_reason` | (a) a data shape · (b) inject the defect | **(b)**: wraps `analysis_population` so it silently loses one row | No data shape reaches the bucket: `analysis_population` records a reason for every row it drops. The gate exists to catch a code defect, so the test injects one |
+| F3 | Where the column is computed | (a) in the export only, with bars passed in · (b) a new `WalkResult` field set by `Walk` | **(b)** | Same window bounds as `MainMissingBars`, by construction. The other modes compute it and print nothing new (`H-8`) |
+| F4 | Where the full-window count is held | (a) a population-row field · (b) a lookup by Timestamp, outside the rows | **(b)** | `run_full` cannot reach it. The selftest asserts that no population row carries it |
+| F5 | The coverage case's resample count | 10,000 · 200 | **200** | It checks equality with a baseline, not a statistic |
+| F6 | The run-1 procedure box | leave · update | **Updated**: ten gates, plus one bullet on the information column | The box listed the gates by name |
+
+### 6.4 What I did not verify
+
+- **Any real outcome, and the full mode on real data.** By design.
+- **A real export with a non-zero `MainFullWindowMissingBars`.** On `aws_fetch/20260928-121255` it is 0 on every population row. The non-zero path is tested on synthetic data only.
+- **`WindowMissingBars` on the `N`, `C24`, `C24N` and `CSE` walks.** Each walk computes it; only the main walk's value is written. The others are unread.
+- **The consumers `medium_tier_diagnosis.py` and `q1d_tier_geometry.py`.** Code read, not run.
+- **The solution build.** Only `SwingFallbackRead.vbproj` was built.
