@@ -34,6 +34,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. **Do not read individual `.vb` files at session start** — only open them when a specific edit is required.
 5. **When the task involves prioritisation, sequencing, or selecting new features**, also read `docs/roadmap.md` — the cross-project strategic roadmap (calibration queue, indicator queue, the DeribitOrderPlacementApp signal bridge, Linux port). Skip it for routine implementation of an already-specced item.
 6. **Before saying anything about what is outstanding, read `docs/trader-tick-queue.md`** — it is the state read, and its §0 scopes what every other doc is authoritative *for*. **Authority is scoped, not ranked:** `roadmap.md` = execution order · `backlog-dependency-map.md` = what blocks what, **not** current state (its cells are dated individually) · `seat-handover-2026-07-18.md` §3 = standing rules, still binding · each spec's own D-table = the decision text, which wins over any summary. A doc's status header is **not** evidence of code state — verify in the tree (`git log --oneline -S'<symbol>' -- <file>`) before offering any spec as available work. A 2026-08-01 sweep found 4 of 13 queue rows describing already-shipped work as outstanding, every one traceable to stale status prose.
+7. **Keep `docs/outstanding.json` current** (added 2026-10-02, trader-directed; it feeds the `outstanding-pane` mod). A commit that opens, closes, re-dates or rules an outstanding item also updates that file and its `updated_utc` in the same commit. Every ID carries its `doc`. Dates in `date` and `since` are GMT+8 calendar dates; times are UTC (`*_utc`). The file is a mirror; the specs and `docs/trader-tick-queue.md` still win.
+
+7. **Know the armed Jev harnesses and fire them on their triggers (ADDED 2026-10-02, trader-directed).** They were armed 2026-09-24 ([`seat-handover-2026-09-24.md`](docs/seat-handover-2026-09-24.md) §1), but their trigger table lived in one handover and fell out of the next three: between 09-25 and 10-02 only harness 1 ran, and harness 5's trial logged **0 of 5** real sessions. Jev returns typed probabilities only; it is bad at maths, counting and dates, so never point it at `analysis_log.csv`. **Shadow-mode rule** ([`harness-shadow-mode-protocol.md`](docs/harness-shadow-mode-protocol.md) §2): write your own read/labels BEFORE running a harness that takes a `-BaselinePath`/`-Baseline`. Load the key first (Git Bash): `set -a; . ./typesafe.local.env; set +a`.
+
+   | Harness | Fire it when | Command (`powershell -NoProfile -File …`) |
+   |---|---|---|
+   | **5 · doc re-ranker** — the context saver | Any "where was this decided / defined?" question, **before** grepping or reading docs. Each live query appends to the gitignored `doc-reranker-query-log.jsonl`; the trial verdict needs ≥ 5 sessions of real use | `tools/checks/doc-reranker.ps1 -Query "<question>"` |
+   | **6 · decision-bias tripwire** | You make a new recommendation on a decision with options. Label your own pick first (baseline), then run it. **A flag sends the decision to the trader** | `tools/checks/measure/decision-bias/run-decision-bias.ps1 -Population … -Baseline … -OutPath …` |
+   | **4 · doc scanner** | Every state read or handover you write | `tools/checks/doc-scanner.ps1 [-Rev <rev>]` |
+   | **2 · commit walker** | Seat start with commits no seat has seen | `tools/checks/commit-walker.ps1 -Count <n> -BaselinePath <your read>` |
+   | **3 · fixture parser** | New fixtures land, or a fixture review | `tools/checks/fixture-parser.ps1 -BaselinePath <your read>` |
+   | 1 · rider travel | An `analysis_log.csv` header rotation | `tools/checks/rider-travel.ps1` (see its USAGE block) |
+
+   ⛔ **Carry this table forward in every handover's first-actions list** until a trial verdict retires a harness. A harness not fired on its trigger is a missed measurement, not a saving.
 
 This preserves context budget for actual work.
 
