@@ -1,0 +1,43 @@
+BOX rows_in_window=6205563 distinct_seqs=5242633 seqless=281573 dup_rows=681357 first_row=07-31T21:49:57
+copies per seq: {1: 4781123, 2: 307816, 3: 87545, 4: 66145, 5: 4}
+
+DUP BLOCKS: 31
+lines               dup_rows  trades from -> to              appended(hw)    lag_min  instance  next PASS (repair_status.log)
+  952139-1048214     96076  09-09T13:49:00 -> 09-10T09:48:56  09-10T09:48:56   1199.9  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 1115766-1209745     93980  09-10T01:49:03 -> 09-10T21:48:45  09-10T21:48:45   1199.7  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 1315313-1424189    108876  09-10T19:49:02 -> 09-11T15:48:57  09-11T15:48:57   1199.9  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 1932177-2043166    110990  09-16T01:49:00 -> 09-16T21:30:34  09-16T21:48:39   1199.7  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 2043171-2043801       631  09-16T21:31:16 -> 09-16T21:48:39  09-16T21:48:39     17.4  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 2060707-2158128     97422  09-16T07:48:56 -> 09-17T00:14:39  09-17T03:48:50   1199.9  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 2158133-2167894      9761  09-17T00:14:47 -> 09-17T03:48:50  09-17T03:48:50    214.0  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 2184633-2279163     94530  09-16T13:48:53 -> 09-17T09:48:45  09-17T09:48:45   1199.9  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 2325879-2394579     68701  09-17T01:48:56 -> 09-17T21:48:44  09-17T21:48:44   1199.8  3fe57c53  (no PASS line within 1 h; log starts 09-21)
+ 3132939-3133105       167  09-23T15:38:11 -> 09-23T15:38:40  09-23T15:39:10      1.0  ee159d03  09-23T15:39:22 PASS_CLEAN windows=2 holes=1 committed=183 not_served=0 failed=0 pages=2 lookback_h=20
+ 3277079-3277238       160  09-24T03:38:10 -> 09-24T03:38:39  09-24T03:39:09      1.0  ee159d03  09-24T03:39:22 PASS_CLEAN windows=1 holes=0 committed=160 not_served=0 failed=0 pages=1 lookback_h=20
+blocks < 100 rows, by instance [blocks, rows]: {'e3781e57': [1, 2], '03a60e32': [3, 11], '3fe57c53': [2, 4], 'ee159d03': [9, 31], '25951567': [4, 11], 'c1855035': [1, 4]}
+duplicate rows appended under a19acc4d (from 09-25 13:29:42): 0
+
+HOLES: trades=1029591 runs=54134
+runs >= 10,000 trades:
+  seq 295034698..295628721 n=594024 07-23T00:00:07 -> 07-31T21:49:35
+  seq 295979208..296005372 n=26165 08-08T08:34:17 -> 08-09T13:59:54
+  seq 296260479..296274883 n=14405 08-15T16:12:16 -> 08-16T20:22:09
+  seq 299692495..299948604 n=256110 09-18T02:01:16 -> 09-20T15:38:37
+runs < 10,000, before the write-guard fix (08-11 17:18:42): runs=54114 trades=138817 in_single_ms_runs=138817 every_ms_has_a_kept_box_row=138810
+runs < 10,000, after the write-guard fix: runs=16 trades=70 in_single_ms_runs=70 every_ms_has_a_kept_box_row=70
+  seq 296275884..296275886 n=3 08-16T21:40:08
+  seq 296278887..296278887 n=1 08-16T23:46:08
+  seq 296280888..296280903 n=16 08-17T01:14:35
+  seq 296281904..296281904 n=1 08-17T01:50:18
+  seq 296282905..296282916 n=12 08-17T02:33:26
+  seq 296283917..296283917 n=1 08-17T02:56:29
+  seq 296285918..296285932 n=15 08-17T04:43:52
+  seq 296287933..296287933 n=1 08-17T06:07:30
+  seq 296288934..296288934 n=1 08-17T06:49:41
+  seq 296290935..296290938 n=4 08-17T08:01:54
+  seq 296295939..296295939 n=1 08-17T11:53:14
+  seq 296296940..296296944 n=5 08-17T12:42:49
+  seq 296298945..296298945 n=1 08-17T13:42:30
+  seq 296299946..296299946 n=1 08-17T14:10:04
+  seq 296303947..296303948 n=2 08-17T15:50:29
+  seq 296304949..296304953 n=5 08-17T16:23:04

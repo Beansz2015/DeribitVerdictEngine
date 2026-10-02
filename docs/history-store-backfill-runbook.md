@@ -6,6 +6,21 @@
 
 ⛔ **Never run this on the collector box** (1 GB RAM, ~7 GB disk, live engine). A new, temporary instance only.
 
+> ✅ **RUN 2026-10-01/02 (UTC) by the orchestrator seat, on the trader's go — every step passed.** Temp instance `i-09345ccb43e175215` (now terminated). Results are in section 8.
+>
+> | Step | Result |
+> |---|---|
+> | b1 self-test | SHA-256 matched; `rate=1247/s` from London |
+> | b2 → `DONE` | 2026-10-01 16:46 → 2026-10-02 09:58 (~17.2 h). 638 days `OK`, 0 `GAP`/`FAILED`, 0 retries, **71,766,893 rows**, 21 months uploaded |
+> | e1 pull | 21 months, every SHA-256 verified, deep status clean. Store 5.7 GB at `C:\DeribitData\history\` |
+> | e2 top-up | Nothing to fetch (2026-10-01 not yet settled) |
+> | e3 comparison #1 | **`verdict=PASS`**, 0 field mismatches. Its large box-store counts are explained in [`box-store-duplicates-and-holes-read-2026-10-02.md`](box-store-duplicates-and-holes-read-2026-10-02.md) |
+> | f terminate | Tag checked first; `terminated` |
+>
+> **Deviations:**
+> - Step a2 used the current collector's subnet `subnet-01ba2678d3784eb45` and SG `sg-04805d848e8e9cb73`. The values below are the pre-port box's; they still exist, in the same VPC.
+> - The run started before 2026-10-02 00:00 UTC (trader's choice). 2026-09-30 was still picked up: each loop pass re-plans and skips only days not yet settled.
+
 ---
 
 ## 0. Read first — three things
@@ -185,10 +200,11 @@ dotnet tools\BacktestRunner\bin\Release\net8.0\BacktestRunner.dll history topup 
 
 ```powershell
 $box = (Get-ChildItem aws_fetch -Directory | Sort-Object Name | Select-Object -Last 1).FullName + '\backtest_data'
-dotnet tools\BacktestRunner\bin\Release\net8.0\BacktestRunner.dll history compare --box $box --store C:\DeribitData\history --from 2026-07-23 --to 2026-09-28 --ledger C:\DeribitData\history\compare_ledger.csv
+dotnet tools\BacktestRunner\bin\Release\net8.0\BacktestRunner.dll history compare --box $box --store C:\DeribitData\history --from 2026-08-01 --to 2026-09-28 --ledger C:\DeribitData\history\compare_ledger.csv
 ```
 
 - Set `--to` to the day **after** the last complete day in that fetch folder.
+- **`--from 2026-08-01`, the first complete box day** (decision `BSR-1`, 2026-10-02). Comparison #1 ran with `2026-07-23`. The box store begins 2026-07-31 21:49 UTC, so that window counted 594,024 days-before-capture trades as "box holes" ([`box-store-duplicates-and-holes-read-2026-10-02.md`](box-store-duplicates-and-holes-read-2026-10-02.md) §2).
 - **Pass:** the last line reads `HISTORY_COMPARE verdict=PASS`. `only_in_dev` above 0 is expected: those are the box store's holes.
 - ⛔ **`verdict=FAIL` stops the plan.** Bring the output to a seat (the escalation trigger in [`history-data-store-spec.md`](history-data-store-spec.md) §0). The row goes to the ledger either way; the stage-4 pass rule reads it (`history passrule --ledger …`).
 
@@ -210,6 +226,12 @@ aws ec2 describe-instances --region eu-west-2 --instance-ids $id --query "Reserv
 ---
 
 ## 8. What I did not verify
+
+> ✅ **Updated 2026-10-02 after the run.** Every "not run" row below has now run and passed: the AWS steps, the Linux build on Amazon Linux 2023, `start` and `loop` under systemd, the S3 download in `history-pull.ps1`, and the subnet's internet route. The pace from London: the self-test measured **1,247 trades/s**; the two pass summaries read gave 1,210 and 1,133 trades/s. The whole 21 months took ~17.2 h. The instance price is still not checked against a bill.
+>
+> ⚠ **Two local AWS CLI traps:**
+> - Printing `systemctl` output fails on this machine's codepage (`'charmap' codec can't encode character '●'`). Set `PYTHONUTF8=1`, or read the output from Git Bash.
+> - A large `get-command-invocation` output can hang in the CLI pager. Add `--no-cli-pager`, or set `AWS_PAGER=""`.
 
 | Claim | Status |
 |---|---|
