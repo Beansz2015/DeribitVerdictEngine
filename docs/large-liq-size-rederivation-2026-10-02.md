@@ -83,7 +83,7 @@ The script mirrors `IndicatorEngine.CalcLiquidations` (`Core/Indicators_OrderFlo
 - **The threshold is read in one place only:** the Step 2 penalty (`Core/ScoringEngine_Calculate_Scoring.vb:400-405`). Live it never fires (finding `L-1`).
 - **Replay fires it today**, with 200 (`tools/BacktestRunner/ReplayLoop.vb:494` and `:628`). The park build (`LP-2` (a), [`liquidation-park-spec.md`](liquidation-park-spec.md) §4.3) removes the penalty from replay too, so replay matches live. From then until un-park, nothing reads the threshold.
 - **Liquidation research uses the sizes, not the threshold.** It passes the per-session values as study parameters. Use this read's `D-5` row: ASIA 69,535 · LONDON 83,250 · NY 49,724 USD.
-- **Code shape:** a per-session `large_liq_size` is a settings shape + scoring change (reserved). **Proposed:** build it as a rider of the park build (same files, after 2026-11-25), with values re-derived by `H-1` on the then-current store under the `D-5` booking. Awaits the trader's tick.
+- **Code shape:** a per-session `large_liq_size` is a settings shape + scoring change (reserved). ✅ **TICKED 2026-10-02 (trader):** built as Rider 3 of the park build ([`liquidation-park-spec.md`](liquidation-park-spec.md) scope table), after 2026-11-25, with values re-derived by `H-1` on the then-current store under the `D-5` booking.
 
 **Auto-proceeded:** 1-minute sampling instead of replaying the engine's exact run instants. The p90 of a 918k-minute superset does not move enough to change any option above. The exact replay needs the logged run grid, which exists only for the box era.
 

@@ -91,6 +91,7 @@ This whole spec, plus the trader's rulings on `LP-1`–`LP-8`. **Do not build a 
 | `EF-3` | An unrecognised value is skipped and counted, and the count goes to a log line | Not reserved — log line only |
 | `A81b` flip | Known-defect repro becomes an always-on guard. Closes the last user of `ORDERCHECK_KNOWN_DEFECTS` (`AT-L2` (c)) | Harness |
 | Render (`LP-3`) | What the four liquidation display sites show once parked | ⛔ Reserved — rendered value |
+| `LLS-1` (Rider 3, ticked 2026-10-02 by the trader) | Per-session `large_liq_size` (ASIA / LONDON / NY): a new settings shape read by the Step 2 penalty. Values re-derived at build time by `H-1` of [`large-liq-size-rederivation-2026-10-02.md`](large-liq-size-rederivation-2026-10-02.md) on the then-current store under the `D-5` booking (2026-10-02 values: ~69.5k / ~83.3k / ~49.7k USD) | ⛔ Reserved — settings shape + scoring code. Live no-op while parked; settings version bump |
 | `D-6` manual | Correct the unit in [`UserManual.md`](UserManual.md) §13 to USD, including lines 1451–1452 | Documentation. Already ruled |
 
 ### Explicitly NOT in scope
