@@ -1,21 +1,15 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-02T15:30Z",
+  "updated_utc": "2026-10-02T15:45Z",
   "updated_by": "seat orchestrator (handover 2026-10-01 seat), Opus 5.5 — every row checked against git and the D-tables",
-  "away": { "from": "2026-10-14", "to": "2026-11-25" },
+  "away": {
+    "from": "2026-10-14",
+    "to": "2026-11-25"
+  },
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 12 commits ahead of origin, docs and tools only (no engine code)",
-      "since": "2026-10-02"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "RVF-3",
-      "meaning": "What the burst read's missing-bars column counts: up to resolution only, or also add a full-window coverage column (the decision-bias tripwire flagged the seat's 'as built' read)",
-      "doc": "docs/burst-outcome-read-rv-fixes-spec-back.md",
-      "anchor": "decision table, row RVF-3, and the RULED box above it",
+      "meaning": "Push master — 13 commits ahead of origin, docs and tools only (no engine code)",
       "since": "2026-10-02"
     },
     {
@@ -32,6 +26,12 @@
       "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
       "doc": "docs/aws-collector-deploy-checklist.md",
       "anchor": "§5 deploy ledger"
+    },
+    {
+      "what": "Liquidation × OFI-flip study, session 1: pre-registered spec and outcome-blind power count",
+      "where": "agent (orchestrator-dispatched)",
+      "started_utc": "2026-10-02T15:40Z",
+      "check": "the orchestrator relays its report"
     }
   ],
   "dated": [
@@ -84,15 +84,9 @@
   ],
   "next_up": [
     {
-      "what": "Liquidation × OFI-flip study on the logged era, session 1: pre-registered spec and outcome-blind power count (scheduled before the holiday)",
-      "doc": "docs/trader-tick-queue.md",
-      "anchor": "§1 Cluster E, row E7",
-      "model": "Opus 5.5, high"
-    },
-    {
-      "what": "Burst read: add the two ruled pre-outcome STOP gates for unexplained drops, plus the coverage column if the open missing-bars decision rules for it",
+      "what": "Burst read: add the two ruled pre-outcome STOP gates and the information-only full-window coverage column — held until the liquidation × OFI study agent finishes",
       "doc": "docs/burst-outcome-read-rv-fixes-spec-back.md",
-      "anchor": "decision table and its RULED box",
+      "anchor": "RULED box above the decision table",
       "model": "Opus 5.5, medium"
     },
     {

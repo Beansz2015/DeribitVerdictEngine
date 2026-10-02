@@ -298,7 +298,7 @@ All are tools-only and undone by one revert. None touches scoring, `settings.jso
 
 ## 3. Queued for the trader (not decided)
 
-> ✅ **RULED 2026-10-02 (trader):** `RVF-1` = **(a)** keep the STOP · `RVF-2` = **(b)** add both gates (a small tools follow-up, not yet built). ⚠ **`RVF-3` OPEN:** harness 6 (decision-bias tripwire) flagged the orchestrator's (a) read as `gives_up_for_economy`, 5 of 5 samples ([`harness-runs/decision-bias-20261002T1520Z-jev.json`](harness-runs/decision-bias-20261002T1520Z-jev.json)). The orchestrator's proposed option (c): keep the gate on outcome-relevant bars (a), and add a full-window coverage column as information only, printed in counts-only and never a gate.
+> ✅ **RULED 2026-10-02 (trader):** `RVF-1` = **(a)** keep the STOP · `RVF-2` = **(b)** add both gates (a small tools follow-up, not yet built). ✅ **`RVF-3` = (c) RULED 2026-10-02 (trader)** — the gate stays on outcome-relevant bars; a full-window coverage column is added as information only (counts-only prints it per session × arm; never a gate). Built together with the `RVF-2` gates in one small follow-up, held until the A4 session-1 agent finishes. History: harness 6 (decision-bias tripwire) flagged the orchestrator's (a) read as `gives_up_for_economy`, 5 of 5 samples ([`harness-runs/decision-bias-20261002T1520Z-jev.json`](harness-runs/decision-bias-20261002T1520Z-jev.json)). The orchestrator's proposed option (c): keep the gate on outcome-relevant bars (a), and add a full-window coverage column as information only, printed in counts-only and never a gate.
 
 | ID (this doc) | Question | Options | My read (a hypothesis) |
 |---|---|---|---|
