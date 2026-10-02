@@ -1,0 +1,121 @@
+{
+  "schema": 1,
+  "updated_utc": "2026-10-02T15:30Z",
+  "updated_by": "seat orchestrator (handover 2026-10-01 seat), Opus 5.5 — every row checked against git and the D-tables",
+  "away": { "from": "2026-10-14", "to": "2026-11-25" },
+  "waiting_on_trader": [
+    {
+      "kind": "push",
+      "meaning": "Push master — 12 commits ahead of origin, docs and tools only (no engine code)",
+      "since": "2026-10-02"
+    },
+    {
+      "kind": "ruling",
+      "tick": true,
+      "id": "RVF-3",
+      "meaning": "What the burst read's missing-bars column counts: up to resolution only, or also add a full-window coverage column (the decision-bias tripwire flagged the seat's 'as built' read)",
+      "doc": "docs/burst-outcome-read-rv-fixes-spec-back.md",
+      "anchor": "decision table, row RVF-3, and the RULED box above it",
+      "since": "2026-10-02"
+    },
+    {
+      "kind": "go",
+      "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
+      "since": "2026-10-02"
+    }
+  ],
+  "in_progress": [
+    {
+      "what": "Collector on AWS, instance 41a3e894 (watchdog restart during a venue halt); read-backs until 2026-10-13",
+      "where": "AWS box i-0d6c133058876273e",
+      "started_utc": "2026-10-01T10:00Z",
+      "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
+      "doc": "docs/aws-collector-deploy-checklist.md",
+      "anchor": "§5 deploy ledger"
+    }
+  ],
+  "dated": [
+    {
+      "date": "2026-10-04",
+      "approx": true,
+      "what": "Fetch with history comparison (collector.ps1 fetch; a FAIL verdict stops the plan). The last fetch ran 2026-10-02, comparison PASS",
+      "doc": "docs/seat-handover-2026-10-01.md",
+      "anchor": "§0 FIRST ACTIONS item 5"
+    },
+    {
+      "date": "2026-10-08",
+      "approx": true,
+      "what": "Absorption Stage 1 read",
+      "doc": "docs/seat-handover-2026-10-01.md",
+      "anchor": "§0 FIRST ACTIONS item 6"
+    },
+    {
+      "date": "2026-10-08",
+      "approx": true,
+      "what": "Fetch with history comparison",
+      "doc": "docs/seat-handover-2026-10-01.md",
+      "anchor": "§0 FIRST ACTIONS item 5"
+    },
+    {
+      "date": "2026-10-09",
+      "approx": true,
+      "what": "ASIA and NY burst-watch reads on the ATR-conditional reference (tools/ops/burst-watch-read.ps1)",
+      "doc": "docs/avr1-atr-conditional-burst-watch-spec.md"
+    },
+    {
+      "date": "2026-10-13",
+      "what": "Final collector read-back and fetch — last working day before the holiday",
+      "doc": "docs/trader-tick-queue.md",
+      "anchor": "TRADER AWAY table, row 5"
+    },
+    {
+      "date": "2026-12-04",
+      "what": "Burst outcome run 1 done (data cut 2026-11-25 00:00 UTC; fresh cache, --run 1, pre-outcome STOP gates)",
+      "doc": "docs/burst-outcome-read-spec.md",
+      "anchor": "§6.1"
+    },
+    {
+      "date": "2027-01-07",
+      "approx": true,
+      "what": "Burst outcome run 2, NY session (when NY reaches 100 arm-A rows)",
+      "doc": "docs/trader-tick-queue.md",
+      "anchor": "TRADER AWAY block, 'After 2026-11-25 — first seats back'"
+    }
+  ],
+  "next_up": [
+    {
+      "what": "Liquidation × OFI-flip study on the logged era, session 1: pre-registered spec and outcome-blind power count (scheduled before the holiday)",
+      "doc": "docs/trader-tick-queue.md",
+      "anchor": "§1 Cluster E, row E7",
+      "model": "Opus 5.5, high"
+    },
+    {
+      "what": "Burst read: add the two ruled pre-outcome STOP gates for unexplained drops, plus the coverage column if the open missing-bars decision rules for it",
+      "doc": "docs/burst-outcome-read-rv-fixes-spec-back.md",
+      "anchor": "decision table and its RULED box",
+      "model": "Opus 5.5, medium"
+    },
+    {
+      "what": "Adversarial review of the indicator review pack, in a fresh seat — attack its order and classes",
+      "doc": "docs/indicator-calibration-review-2026-10-02.md",
+      "anchor": "§6–§9",
+      "model": "Opus 5.5 or Fable 5.1, high"
+    },
+    {
+      "what": "Raw order-book absorption test — only if the pre-holiday list is done with time to spare, else after 2026-11-25",
+      "doc": "docs/seat-handover-2026-10-01.md",
+      "anchor": "§0 FIRST ACTIONS item 7",
+      "model": "Opus 5.5, high"
+    },
+    {
+      "what": "After 2026-11-25: first fetch, closing history comparison, then the stage-4 pass rule (run dates, 14 days)",
+      "doc": "docs/history-data-store-build-spec-back.md",
+      "anchor": "decision table, row D-6"
+    },
+    {
+      "what": "After 2026-11-25: the rest of the post-holiday order (measurement fixes, daylight-saving session hours, liquidation park build with the per-session liquidation-size rider, ADX/RSI re-anchor)",
+      "doc": "docs/seat-handover-2026-10-01.md",
+      "anchor": "§3"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+ "rev": "51fc5919c49e8e1a6000ea52dfba996c4b709190",
+ "rev7": "51fc591",
+ "stamp_utc": "20261002T1520Z",
+ "builder": "orchestrator seat, by hand (1 live item)",
+ "note": "STATE ONLY. Live recommendation, not yet ruled.",
+ "items": [
+  {
+   "id": "docs/burst-outcome-read-rv-fixes-spec-back.md|RVF-3@51fc591",
+   "question": "The burst read's MainMissingBars column counts missing candle bars only up to the bar where the outcome walk resolves (TP or SL hit); a gap after an early resolution is not counted. Run 1 STOPs if any population row has MainMissingBars > 0. What should the column count?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "accept as built: count missing bars only up to resolution",
+     "src": "docs/burst-outcome-read-rv-fixes-spec-back.md"
+    },
+    {
+     "label": "(b)",
+     "text": "add a full-window coverage column to the export (changes MediumTierDiagnosisExport.vb output columns)",
+     "src": "docs/burst-outcome-read-rv-fixes-spec-back.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "A bar after resolution cannot change the row's outcome, so counting it would STOP run 1 on gaps that do not matter. Tape completeness over the full window is already measured by the venue check and the history-store comparison. (b) also changes a shared export's columns.",
+   "question_src": "docs/burst-outcome-read-rv-fixes-spec-back.md",
+   "rationale_src": [
+    "docs/burst-outcome-read-rv-fixes-spec-back.md"
+   ],
+   "state_rev": "51fc5919c49e8e1a6000ea52dfba996c4b709190",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

@@ -298,6 +298,8 @@ All are tools-only and undone by one revert. None touches scoring, `settings.jso
 
 ## 3. Queued for the trader (not decided)
 
+> ✅ **RULED 2026-10-02 (trader):** `RVF-1` = **(a)** keep the STOP · `RVF-2` = **(b)** add both gates (a small tools follow-up, not yet built). ⚠ **`RVF-3` OPEN:** harness 6 (decision-bias tripwire) flagged the orchestrator's (a) read as `gives_up_for_economy`, 5 of 5 samples ([`harness-runs/decision-bias-20261002T1520Z-jev.json`](harness-runs/decision-bias-20261002T1520Z-jev.json)). The orchestrator's proposed option (c): keep the gate on outcome-relevant bars (a), and add a full-window coverage column as information only, printed in counts-only and never a gate.
+
 | ID (this doc) | Question | Options | My read (a hypothesis) |
 |---|---|---|---|
 | `RVF-1` | A genuine venue gap inside a population row's main window now STOPs run 1. Today: 0 such rows on `aws_fetch/20260928-121255` (fresh cache) and on `aws_fetch/20261002-121123` (re-fetched week). A Deribit candle gap after today could still land one | (a) STOP and ask, as built · (b) pre-register now: drop rows with `MainMissingBars` > 0, count them per arm, and go on | **(a)**. A STOP happens before any outcome is opened, so ruling it then does not contaminate run 1. (b) is cheaper at run time but adds a rule to a pre-registered read without a case in hand. ⚠ If the trader prefers no run-1 stall, (b) must be written into `docs/burst-outcome-read-spec.md` §5 before 2026-11-25 |
