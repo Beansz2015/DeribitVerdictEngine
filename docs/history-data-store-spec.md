@@ -70,6 +70,8 @@
 
 ### 2b. Items the history store reshapes — edit them when the store exists
 
+> ✅ **APPLIED 2026-10-02 (UTC)** — the dev store exists (21-month backfill, [`history-store-backfill-runbook.md`](history-store-backfill-runbook.md)). Row 1: the re-derivation ran, [`large-liq-size-rederivation-2026-10-02.md`](large-liq-size-rederivation-2026-10-02.md) (pooled p90 ≈ 60,000 USD; value queued as `LLS-1`, not applied). Row 2: queue item `E7` annotated. Row 3: the queue's liquidation-flag row already says B2 is live-scoring only.
+
 | Item | Where | Change when the store exists (after stage 2b) |
 |---|---|---|
 | Re-derive `large_liq_size` from real liquidation sizes (finding `L-3`, ruling `D-6`) | `trader-tick-queue.md` §2 liquidation-flag row | **No longer waits for engine-fix B2.** Run it on the dev store's flagged trades |
