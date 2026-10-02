@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-02T15:45Z",
+  "updated_utc": "2026-10-02T15:55Z",
   "updated_by": "seat orchestrator (handover 2026-10-01 seat), Opus 5.5 — every row checked against git and the D-tables",
   "away": {
     "from": "2026-10-14",
@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 13 commits ahead of origin, docs and tools only (no engine code)",
+      "meaning": "Push master — 15 commits ahead of origin, docs and tools only (no engine code)",
       "since": "2026-10-02"
     },
     {
