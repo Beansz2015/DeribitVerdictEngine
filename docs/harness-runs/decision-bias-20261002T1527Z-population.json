@@ -1,0 +1,304 @@
+{
+ "rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+ "rev7": "a42804a",
+ "stamp_utc": "20261002T1527Z",
+ "builder": "A4 session-1 agent, by hand (10 live items)",
+ "note": "STATE ONLY. Live recommendations in the A4 logged-era study spec, not yet ruled.",
+ "items": [
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-1@a42804a",
+   "question": "Which instant anchors an event of the A4 logged-era study (a large liquidation cluster from the history store joined to logged per-run OFI)?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "onset: the first trade at which the 500-trade window fires large after 30 min without firing; R1 = the first logged run after it",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "the episode's last firing trade; R1 = the first run after the cascade ends",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "engine-mirrored: the first logged run whose own 500-trade window fires large",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(b) conditions entry on the future absence of further liquidations (look-ahead); it is mechanically wrong for an outcome study. (c) is the subset of (a) whose window still holds the cascade at R1; the counts tool prints that subset (19 of 28), so nothing is lost.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-2@a42804a",
+   "question": "How are consecutive firings collapsed so that one cascade counts as one event?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "30 min gap with no large firing, any side; firing inside the gap continues the episode",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "15 min gap",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "the session's outcome window as the gap (NY 15 min, ASIA and LONDON 45 min)",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "60 min gap",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "No option records more information: a shorter gap only adds dependent events from the same cascade, a longer one merges separate cascades. 30 min is a uniform past-only rule; days are the bootstrap cluster, so overlapping outcome windows inside a day are handled.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-3@a42804a",
+   "question": "What counts as an OFI flip against the cascade at the logged run after the event?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "state at R1: logged OFIRatio re-thresholded at 1.60/0.625 on the fade side (FLIP), else BALANCED or WITH",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "transition: R0 (last run before onset) not on the fade side and R1 on the fade side",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "continuous: fade-signed ln(OFIRatio) at R1, no threshold",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a) primary; (c) printed as a descriptive slope and terciles",
+   "rationale": "(a) matches the engine's own OFI classes, so it is the rule an un-park would deploy. (b) is not more faithful: A4's flip starts from the with-cascade state during the cascade, and R0 is the pre-cascade book, which the run grid cannot replace; R0 state is still printed. (c) is computed and printed, so no information is dropped.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-4@a42804a",
+   "question": "Which logged run supplies the OFI value and the entry instant?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "R1 = the first run whose Timestamp second is strictly after the onset's second, within 90 s (NY) or 210 s (ASIA, LONDON); same rule for both arms",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "the first fade-side run within N minutes after onset",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "(a) plus a minimum lag of 10 s so the 10 s OFI average covers post-onset book",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(b) gives the two arms different entry instants and selects on future OFI, so it is mechanically wrong. (c) would drop 2 of 28 events for a coverage nuance; the lag is printed per event so the sensitivity can be shown.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-5@a42804a",
+   "question": "What is the flip arm compared against?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "events without a flip only (FLIP vs NO-FLIP, re-weighted by session x side)",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "(a) plus FLIP net EV vs zero",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "(b) plus FLIP vs an OFI-only control: non-event runs with the same OFI class, re-weighted by session x side x ATR tercile",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "(c) records the most: (a) asks whether the flip adds to the cascade, (b) whether the fade pays at all, (c) whether the cascade adds anything over the OFI vote the engine already has. The control pool is large (40,410 runs), so it costs little power.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-6@a42804a",
+   "question": "What outcome measure and instrument does the run use?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "house net EV per trade (DeribitIndicatorProject.md 5a) from R1's logged placed levels on the fade side, house window (NY 15 min, ASIA/LONDON 45 min), maker/maker fee, walked on the history-store trade tape",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "fixed-horizon mark-to-market net return",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "(a) decides and (b) is printed descriptively",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "(a) but walked on 1-minute candles with the house same-bar-ambiguity rule",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(c), with the tape walk",
+   "rationale": "The tape walk resolves target and stop at trade level, so there is no same-bar ambiguity to score as a stop; it is more truthful than (d). (b) is kept as a descriptive line.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-7@a42804a",
+   "question": "Are weekend events included?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "all days, with a weekday/weekend split printed",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "weekdays only, the house trading week",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Liquidations and the collector run every day, and the queue row for A4 says a cascade on any day counts. (a) keeps more events and still shows the split.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-8@a42804a",
+   "question": "What happens to an event whose R1 row may carry snapshot OFI instead of the 10 s average (AggrVelBurstRatio empty, or WsHealth not OK)?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "drop it and count it as a named reason",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "keep it",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The logged value on those rows is a different construction (REST fallback or warm-up revert to snapshot OFI). Keeping them mixes two measures under one column. 1 of 34 events.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-9@a42804a",
+   "question": "Multiplicity control across the tests",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "A4L-H1 alone at alpha 0.05; A4L-H2 and A4L-H3 as a secondary family, Holm at 0.05",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "Holm across all three",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "Bonferroni across all three",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The burst read's structure: one primary, one Holm family for the secondaries. (b) and (c) only lower power on the primary.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-10@a42804a",
+   "question": "The power count shows 8 FLIP and 20 NO-FLIP events in the logged era; FLIP reaches the n >= 100 readability floor about 2028-09 at the current rate. What happens to session 2 (the outcome run)?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "keep the outcome sealed: park session 2; re-run the counts tool at each store refresh; run when FLIP >= 100 or when the trader rules a redesign",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "run session 2 now as pre-registered; every label is NOT READABLE by rule and the CIs bound only effects above about 40 to 100 bps",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "redesign for power now (lower size threshold or the standard liquidation signal) and pre-register again",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "close the logged-era study; A4 waits for a real-time liquidation source and raw book",
+     "src": "docs/a4-liq-ofi-logged-era-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(b) is uninterpretable under the census rule and it unseals the same span, so any later redesign on these days would no longer be outcome-blind. (c) departs from the ruled LLS-1 study thresholds and the brief forbids a redesign for power by this seat. (d) throws away a cheap, outcome-blind accrual check.",
+   "question_src": "docs/a4-liq-ofi-logged-era-study-spec.md",
+   "rationale_src": [
+    "docs/a4-liq-ofi-logged-era-study-spec.md"
+   ],
+   "state_rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

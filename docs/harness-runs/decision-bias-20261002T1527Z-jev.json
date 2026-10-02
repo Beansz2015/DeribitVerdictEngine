@@ -1,0 +1,254 @@
+{
+    "rev":  "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+    "population":  "docs/harness-runs/decision-bias-20261002T1527Z-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20261002T1527Z-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "jev_model":  "requested=[jev-latest x50] resolved=[jev-1.13.0 x50] run_utc=2026-10-02T15:28:38Z",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  50,
+    "usage_input_tokens":  38934,
+    "wall_time_sec":  17.16,
+    "items":  [
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-1@a42804a",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.882,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.88,
+                                                       0.87,
+                                                       0.89,
+                                                       0.86,
+                                                       0.91
+                                                   ],
+                      "usage_input_tokens":  4026,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-2@a42804a",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.562,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.57,
+                                                       0.55,
+                                                       0.59,
+                                                       0.57,
+                                                       0.53
+                                                   ],
+                      "usage_input_tokens":  3875,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-3@a42804a",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.908,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.91,
+                                                       0.91,
+                                                       0.92,
+                                                       0.9,
+                                                       0.9
+                                                   ],
+                      "usage_input_tokens":  4149,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-4@a42804a",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.878,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.87,
+                                                       0.89,
+                                                       0.87,
+                                                       0.88,
+                                                       0.88
+                                                   ],
+                      "usage_input_tokens":  3909,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-5@a42804a",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.952,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.95,
+                                                       0.96,
+                                                       0.95,
+                                                       0.95,
+                                                       0.95
+                                                   ],
+                      "usage_input_tokens":  3873,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-6@a42804a",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.888,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.89,
+                                                       0.89,
+                                                       0.88,
+                                                       0.89
+                                                   ],
+                      "usage_input_tokens":  4047,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-7@a42804a",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.526,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.57,
+                                                       0.52,
+                                                       0.54,
+                                                       0.52,
+                                                       0.48
+                                                   ],
+                      "usage_input_tokens":  3402,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-8@a42804a",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.982,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.98,
+                                                       0.99,
+                                                       0.98,
+                                                       0.98,
+                                                       0.98
+                                                   ],
+                      "usage_input_tokens":  3525,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-9@a42804a",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.432,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.44,
+                                                       0.44,
+                                                       0.44,
+                                                       0.43,
+                                                       0.41
+                                                   ],
+                      "usage_input_tokens":  3601,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-10@a42804a",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.99,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.99,
+                                                       0.99,
+                                                       0.99,
+                                                       0.99,
+                                                       0.99
+                                                   ],
+                      "usage_input_tokens":  4527,
+                      "seat_label":  "richer_option_wrong"
+                  }
+              ]
+}

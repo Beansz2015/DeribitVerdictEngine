@@ -1,0 +1,15 @@
+{
+ "rev": "a42804a919ffcb0283fbfaf1c003f0abd0e67d28",
+ "labels": {
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-1@a42804a": "richer_option_wrong",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-2@a42804a": "no_richer_option",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-3@a42804a": "richer_option_wrong",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-4@a42804a": "richer_option_wrong",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-5@a42804a": "no_richer_option",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-6@a42804a": "no_richer_option",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-7@a42804a": "no_richer_option",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-8@a42804a": "richer_option_wrong",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-9@a42804a": "gives_up_for_economy",
+  "docs/a4-liq-ofi-logged-era-study-spec.md|A4L-10@a42804a": "richer_option_wrong"
+ }
+}
