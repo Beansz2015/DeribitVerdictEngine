@@ -99,7 +99,7 @@ runs < 10,000, after the write-guard fix: runs=16 trades=70 in_single_ms_runs=70
 
 | Claim | Status |
 |---|---|
-| The current build (`bb14dc8`, the collector-halt fixes build, deployed 2026-09-29) writes no duplicates | **Not covered.** This fetch predates it. The next fetch (~10-04) plus `H-1` on a new window covers it |
+| The current build (`bb14dc8`, the collector-halt fixes build, deployed 2026-09-29) writes no duplicates | ✅ **Checked 2026-10-02 on fetch `aws_fetch/20261002-121123`:** 0 duplicate rows appended after the 2026-09-29 20:51 deploy (~2.6 days; same block method, inline script). Comparison #2 (09-25 → 09-30): 0 holes, 0 field mismatches, 5 duplicate rows, all before the deploy |
 | Why the 7 rewrite passes' store scans failed | Unknown, as in the 2026-09-15 read's §3. The fix makes a failed scan loud (`SCAN_FAILED`) instead of silent |
 | The 20 small duplicate blocks are all `RR-1` repeat fills | Not attributed row by row; 63 rows |
 | 7 of the 138,817 same-ms trades have no kept sibling in their millisecond | Not examined; their class is assumed from the era |
