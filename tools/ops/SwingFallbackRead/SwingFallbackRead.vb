@@ -271,6 +271,7 @@ Public Module SwingFallbackReadProgram
         ' ---- join diagnosis (brief §2)
         Dim evalRows = LoadEval(evalPath)
         Dim boxLog As New Dictionary(Of DateTime, CsvRow)()
+        ' NOTE (review finding RV-6, docs/burst-outcome-read-tools-review-2026-10-02.md): boxLog is LAST-wins (live over rotated over v0.7), the merge below is FIRST-wins; it feeds only the default mode's eval-cache join diagnostic. Left as is on purpose.
         For Each x In boxRows
             If x.Item1.Timestamp <> DateTime.MinValue Then boxLog(x.Item1.Timestamp) = x.Item1
         Next
@@ -949,9 +950,9 @@ Public Module SwingFallbackReadProgram
             Dim closeT As DateTime = wk.AddDays(4).AddHours(weekCloseHourExcl)
             Dim path As String = IO.Path.Combine(cacheDir, "ohlc_1m_BTC-PERPETUAL_week_" & wk.ToString("yyyy-MM-dd", Inv) & ".csv")
             Dim weekBars As New List(Of OhlcBar)()
-            Dim source As String
+            Dim source As String = Nothing
+            Dim partialNote As String = ""
             If File.Exists(path) Then
-                source = "cache"
                 For Each line In File.ReadLines(path).Skip(1)
                     Dim p = line.Split(","c)
                     weekBars.Add(New OhlcBar With {
@@ -959,8 +960,19 @@ Public Module SwingFallbackReadProgram
                         .Open = Double.Parse(p(1), Inv), .High = Double.Parse(p(2), Inv),
                         .Low = Double.Parse(p(3), Inv), .Close = Double.Parse(p(4), Inv)})
                 Next
-            Else
-                source = "Deribit"
+                ' A cached week written before the week closed is PARTIAL (docs/burst-outcome-read-tools-review-2026-10-02.md
+                ' finding RV-1). Reused, every later row of that week walks no bars and scores -fee, silently. So a cached week
+                ' whose last bar is before the week close AND before now is re-fetched. A complete cached week is reused as before.
+                Dim lastBar As DateTime = If(weekBars.Count = 0, DateTime.MinValue, weekBars.Max(Function(b) b.CloseTime))
+                If lastBar < closeT AndAlso lastBar < DateTime.UtcNow Then
+                    partialNote = " (cache was partial, last bar " & If(weekBars.Count = 0, "none", lastBar.ToString("MM-dd HH:mm", Inv)) & "; re-fetched)"
+                    weekBars = New List(Of OhlcBar)()
+                Else
+                    source = "cache"
+                End If
+            End If
+            If source Is Nothing Then
+                source = "Deribit" & partialNote
                 Dim map = Await DeribitOhlcFetcher.FetchOhlcRange(openT, closeT)
                 If map Is Nothing Then Throw New InvalidOperationException("candle fetch failed for week " & wk.ToString("yyyy-MM-dd", Inv) & ". STOP.")
                 weekBars = map.Values.Where(Function(b) b.CloseTime > openT AndAlso b.CloseTime <= closeT).OrderBy(Function(b) b.CloseTime).ToList()

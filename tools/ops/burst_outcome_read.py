@@ -45,18 +45,26 @@
 #     a labelled result whose sign flips gains "SEAM-SENSITIVE". Run 2 is wholly post-seam: that run prints n/a.
 #
 # Modes:
-#   --counts-only  population, exclusions, export drops by reason and arm counts; EXITS before any outcome column is
-#                  opened. The export is read through a column whitelist that holds no outcome column (asserted).
+#   --counts-only  population, exclusions, export drops by reason, arm counts, the coverage column MainMissingBars and
+#                  the pre-outcome gates (printed, never stopping); EXITS before any outcome column is opened. The export
+#                  is read through a column whitelist that holds no outcome column (asserted).
 #   --selftest     synthetic books + synthetic export in a temp dir, the full pipeline, known answers asserted.
-#   (default)      the full read. Run it only as the pre-registered run 1 / run 2.
+#   (default)      the full read. Run it only as the pre-registered run 1 (--run 1) or run 2 (--run 2 --from <ts>); it
+#                  refuses to start without one. --run pins the window, seed and resamples (RUN_PINS below).
 #
-# Run (from the repo root):
+# Pre-outcome gates (review docs/burst-outcome-read-tools-review-2026-10-02.md findings RV-1 and RV-2). Full mode STOPs
+# (exit 2, the failed checks named) before any outcome column is opened unless: every population row has
+# MainMissingBars = 0 (the main-window walk saw every 1-minute bar); analysis rows not in the power-count population = 0;
+# rows with a different arm, shadow arm or fifth = 0; export Session and AggrVelSignal mismatches = 0; "verdict differs"
+# and "Side/Tier inconsistent" drops = 0; settings.json version = the run's pinned version.
+#
+# Run (from the repo root; run 1 from a worktree at the reviewed tools commit, docs/burst-outcome-read-spec.md section 6.1):
 #   dotnet build tools/ops/SwingFallbackRead/SwingFallbackRead.vbproj -c Release
 #   dotnet tools/ops/SwingFallbackRead/bin/Release/net8.0/SwingFallbackRead.dll --root . --mode diagexport \
 #     --fetch aws_fetch/<fetch> --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv \
-#     --cache backtest_data/burst-outcome-read --out backtest_data/burst-outcome-read/diagnosis-rows-<fetch>.csv
-#   python tools/ops/burst_outcome_read.py --counts-only --export <that csv> --fetch aws_fetch/<fetch> \
-#     --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv --cut-before 2026-11-25T00:00:00Z
+#     --cache <a FRESH, EMPTY folder> --out <that folder>/diagnosis-rows-<fetch>.csv
+#   python tools/ops/burst_outcome_read.py --counts-only --run 1 --export <that csv> --fetch aws_fetch/<fetch> \
+#     --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv
 #   python tools/ops/burst_outcome_read.py --selftest
 
 import argparse, csv, glob, hashlib, json, math, os, random, shutil, sys, tempfile
@@ -94,9 +102,34 @@ BOOK_NEED = ["Timestamp", "Price", "Verdict", "ATR", "AggrVelBurstRatio", "AggrV
 SIGNAL_COLS = ["Timestamp", "Session", "Side", "Tier", "Verdict", "Price", "Atr", "AggrVelSignal", "MaxScore",
                "EffectiveLongScore", "EffectiveShortScore", "InstanceId"]
 OUTCOME_COLS = ["MainNetEv", "MainOutcome", "TBps", "SBps"]
-FORBIDDEN_IN_COUNTS = {"MainOutcome", "MainResolveMin", "MainNetEv", "MainMissingBars", "C24Outcome", "C24ResolveMin",
+# MainMissingBars is a COVERAGE column, not an outcome (review finding RV-1): the count of 1-minute bars the main-window
+# walk did not find. A row with no bars scores -fee silently, so it is read with the signal columns, BEFORE any outcome
+# column, in both modes. ⚠ It is not a pure coverage count: the walk stops at resolution, so a gap after an early
+# resolution is not counted. The gate below needs it to be 0 on every row, so it can only ever reveal "all zero" or a
+# count that stops the run.
+COVERAGE_COLS = ["MainMissingBars"]
+FORBIDDEN_IN_COUNTS = {"MainOutcome", "MainResolveMin", "MainNetEv", "C24Outcome", "C24ResolveMin",
                        "C24NetEv", "C24MissingBars", "TBps", "SBps", "TAtr", "SAtr"}
-assert not (set(SIGNAL_COLS) & FORBIDDEN_IN_COUNTS), "an outcome column is in the counts whitelist"
+assert not (set(SIGNAL_COLS + COVERAGE_COLS) & FORBIDDEN_IN_COUNTS), "an outcome column is in the counts whitelist"
+
+# --- Run pins (review finding RV-2). docs/burst-outcome-read-spec.md section 6.1: run 1 reads rows before the fixed cut
+# 2026-11-25 00:00:00 UTC; run 2 reads rows from the first row after the daylight-saving-aware session-hours deploy (given
+# with --from, never before the run-1 cut, so the two runs stay disjoint). Seed: decision TB-D11 (20260928). Resamples:
+# the house rule (10,000), docs/burst-outcome-read-spec.md section 5 "CI". Settings version: run 1 is pre-registered at
+# v69 (docs/burst-outcome-read-spec.md sections 1 and 5). Run 2's version is not pinned yet: the run-2 rider (review
+# finding RV-4) must pin it. MECHANISM-class literals: dates and values of record, not settings thresholds.
+RUN1_CUT = datetime(2026, 11, 25, 0, 0, 0)
+RUN_SEED = 20260928
+RUN_RESAMPLES = 10000
+RUN_SETTINGS_VERSION = {"1": 69}
+
+
+class GateStop(Exception):
+    """A pre-outcome gate failed in full mode. Carries the run context (for the output file) and the failed check names."""
+    def __init__(self, cx, names):
+        Exception.__init__(self, "pre-outcome gate(s) failed: " + ", ".join(names))
+        self.cx = cx
+        self.names = names
 
 DIRSET = {"STRONG LONG": ("LONG", "STRONG"), "LONG": ("LONG", "MEDIUM"), "WEAK LONG": ("LONG", "WEAK"),
           "STRONG SHORT": ("SHORT", "STRONG"), "SHORT": ("SHORT", "MEDIUM"), "WEAK SHORT": ("SHORT", "WEAK")}
@@ -490,7 +523,8 @@ def analysis_population(cx, export_rows, book, opt):
         a = arm_fields(cx, sess, side, band, atr, b["TFISignal"], b["AggrVelSignal"], ratio, net is not None, net or 0.0,
                        e["MaxScore"], e["EffectiveLongScore"], e["EffectiveShortScore"])
         a.update({"ts": ts, "s": sess, "band": band, "side": side, "key": key, "day": ts.strftime("%Y-%m-%d"),
-                  "poc": "pre" if ts < POC_EDGE else "post", "seam": "pre" if ts < SEAM[sess] else "post", "era4": era4(ts)})
+                  "poc": "pre" if ts < POC_EDGE else "post", "seam": "pre" if ts < SEAM[sess] else "post", "era4": era4(ts),
+                  "missing": tryi(e["MainMissingBars"])})   # coverage column (RV-1); None = not parseable
         pop.append(a)
     return pop, drops, n_win, session_mismatch, sig_mismatch
 
@@ -589,6 +623,9 @@ def arm_rw(pop_rows, is_a, is_b, strat, name, ctx):
     full_draws = sorted(-v for v in DRAWS[n0])   # FULL is the first boot() call inside rw_run (halves order)
     neg = {h: (-v[0], -v[2], -v[1], [v[3][1], v[3][0]]) for h, v in res.items()}   # counts become [A, B]
     lab = label(neg, (0, 1))
+    # rw_run appended its B - A label and FULL result to ALL_LABELS; replace that entry with the negated A - B one, so the
+    # list never carries an inverted direction (review finding RV-6).
+    ALL_LABELS[-1] = (ctx, name, lab, neg["FULL"])
     b_keys = set(strat(r) for r in rr if r["tier"] == "MEDIUM")
     a_nocov = sum(1 for r in rr if r["tier"] == "WEAK" and strat(r) not in b_keys)
     return {"res": neg, "label": lab, "draws": full_draws, "strata": len(keys), "a_dropped": a_nocov}
@@ -633,6 +670,7 @@ def finalize_label(x, sens, sens_seam=None):
         if sp == sp and fp == fp and (sp > 0) != (fp > 0):
             lab += " SEAM-SENSITIVE"
     x["seam_pt"] = sens_seam["res"]["FULL"][0] if sens_seam is not None else None
+    x["edge_pt"] = sens["res"]["FULL"][0] if sens is not None else None
     x["final"] = lab
     return lab
 
@@ -713,15 +751,18 @@ def run_full(cx, pop, opt):
                                     ("BO-H2", "BO-H2 (secondary, the (c) test): fifths 4-5, (A + S_add) - (B - S_add), re-weighted; Holm over readable sessions", h2, h2s, h2q)):
         cx.p("### 3.%d %s" % (2 if hid == "BO-H1" else 3, title))
         cx.p()
-        cx.p("| Session | Strata | A rows dropped (stratum without B) | FULL d [95 % CI] (nA/nB) | H1 d (nA/nB) | H2 d (nA/nB) | boot p | Holm alpha | Holm-adjusted FULL CI | Pre-edge FULL d (nA/nB) | Pre-seam FULL d (nA/nB) | Label |")
-        cx.p("|---|---|---|---|---|---|---|---|---|---|---|---|")
+        # "Holm passed" (review finding RV-5, display only): the step-down had not stopped AND the Holm-adjusted FULL CI
+        # excludes 0. It shows whether a result that is not CONFIRMED was stopped by Holm. The label wording is unchanged.
+        cx.p("| Session | Strata | A rows dropped (stratum without B) | FULL d [95 % CI] (nA/nB) | H1 d (nA/nB) | H2 d (nA/nB) | boot p | Holm alpha | Holm-adjusted FULL CI | Holm passed | Pre-edge FULL d (nA/nB) | Pre-seam FULL d (nA/nB) | Label |")
+        cx.p("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for s in SESS_ORDER:
             x = hres[s]; sv = hsens[s]; sq = hseam[s]
             lab = finalize_label(x, sv, sq)
             results[(hid, s)] = x
-            cx.p("| %s | %d | %d | %s | %s | %s | %.4f | %s | [%s, %s] | %s | %s | %s |" % (
+            cx.p("| %s | %d | %d | %s | %s | %s | %.4f | %s | [%s, %s] | %s | %s | %s | %s |" % (
                 s, x["strata"], x["a_dropped"], row_ci(x["res"], "FULL"), row_ci(x["res"], "H1"), row_ci(x["res"], "H2"),
                 x["p"], ("%.4f" % x["alpha"]) if x["alpha"] == x["alpha"] else "n/a", f1(x["hci"][0]), f1(x["hci"][1]),
+                "yes" if x["reject"] else "no",
                 row_ci(sv["res"], "FULL") if sv else "n/a (no pre-edge rows)",
                 row_ci(sq["res"], "FULL") if sq else "n/a (no pre-seam rows)", lab))
         cx.p()
@@ -755,6 +796,17 @@ def run(opt):
     args = opt
     R = opt.resamples
     DRAWS.clear(); SEEDC[0] = 0; ALL_LABELS.clear()
+    run_id = getattr(opt, "run", None)
+    if not opt.counts_only:
+        # Full mode only as a pinned run (RV-2). main() pins the values; this re-checks them for any caller.
+        if run_id == "1":
+            if opt.cut_before != RUN1_CUT or opt.from_ is not None or opt.seed != RUN_SEED:
+                raise SystemExit("--run 1 must read Timestamp < %s, no --from, seed %d. STOP." % (RUN1_CUT, RUN_SEED))
+        elif run_id == "2":
+            if opt.from_ is None or opt.from_ < RUN1_CUT or opt.cut_before is not None or opt.seed != RUN_SEED:
+                raise SystemExit("--run 2 needs --from >= %s, no --cut-before, seed %d. STOP." % (RUN1_CUT, RUN_SEED))
+        else:
+            raise SystemExit("full mode runs only as --run 1 or --run 2 --from <ts> (docs/burst-outcome-read-spec.md section 6.1). STOP.")
     cx = Ctx(opt.root)
     cx.p("# burst_outcome_read.py output (%s)" % ("COUNTS ONLY: no outcome column opened" if opt.counts_only else "FULL READ"))
     cx.p()
@@ -764,11 +816,12 @@ def run(opt):
          % (cx.cfg["version"], cx.fixed["ASIA"], cx.fixed["LONDON"], cx.fixed["NY"], cx.bonus))
     cx.p("- Data window: %s%s" % ("Timestamp < %s " % opt.cut_before if opt.cut_before else "", "Timestamp >= %s" % opt.from_ if opt.from_ else "")
          + ("(none: every row)" if not (opt.cut_before or opt.from_) else ""))
+    cx.p("- Run: %s; seed %d; resamples %d." % ("--run " + run_id if run_id else "none (counts only)", opt.seed, opt.resamples))
     cx.p("- Export `%s` (MD5 %s)." % (opt.export, md5(opt.export)))
 
     book = load_books(cx, opt.fetch, opt)
     ref, x = reference_population(cx, book)
-    export_rows = read_export(opt.export, SIGNAL_COLS)
+    export_rows = read_export(opt.export, SIGNAL_COLS + COVERAGE_COLS)
     pop, drops, n_win, smis, sigmis = analysis_population(cx, export_rows, book, opt)
 
     cx.p()
@@ -826,11 +879,46 @@ def run(opt):
             s, sum(1 for r in pop if r["s"] == s and r["seam"] == "pre" and r["arm"] == "A"), sum(1 for r in pop if r["s"] == s and r["seam"] == "pre" and r["arm"] == "B"),
             sum(1 for r in pop if r["s"] == s and r["seam"] == "post" and r["arm"] == "A"), sum(1 for r in pop if r["s"] == s and r["seam"] == "post" and r["arm"] == "B"))
         for s in SESS_ORDER))
-    info = {"pop": pop, "ref": ref, "refx": x, "drops": drops, "why": why, "extra": len(extra), "arm_diff": arm_diff}
+    # ---- coverage (RV-1): MainMissingBars, read with the signal columns, before any outcome column
+    miss = {(s, a): sum(1 for r in pop if r["s"] == s and r["arm"] == a and (r["missing"] or 0) > 0) for s in SESS_ORDER for a in "ABCO"}
+    n_miss = sum(1 for r in pop if r["missing"] is not None and r["missing"] > 0)
+    n_unparsed = sum(1 for r in pop if r["missing"] is None)
+    cx.p("- Coverage (MainMissingBars > 0 = the main-window walk lacks at least one 1-minute bar; a coverage column, not an outcome). Population rows, by session and arm: "
+         + "  ".join("%s A %d B %d C %d O %d" % (s, miss[(s, "A")], miss[(s, "B")], miss[(s, "C")], miss[(s, "O")]) for s in SESS_ORDER)
+         + ". Total %d; MainMissingBars not parseable: %d." % (n_miss, n_unparsed))
+
+    # ---- pre-outcome gates (RV-1, RV-2). Printed in both modes; full mode STOPs on any FAIL, before run_full.
+    pin_v = RUN_SETTINGS_VERSION.get(run_id or "1")
+    gates = [
+        ("missing_bars", n_miss == 0 and n_unparsed == 0, "population rows with MainMissingBars > 0 or not parseable = %d (must be 0)" % (n_miss + n_unparsed)),
+        ("extra", len(extra) == 0, "analysis rows not in the power-count population = %d (must be 0)" % len(extra)),
+        ("arm_diff", arm_diff == 0, "rows in both with a different arm, shadow arm or fifth = %d (must be 0)" % arm_diff),
+        ("session_mismatch", smis == 0, "export Session differs from the hour's session = %d (must be 0)" % smis),
+        ("signal_mismatch", sigmis == 0, "export AggrVelSignal differs from the fetch book = %d (must be 0)" % sigmis),
+        ("verdict_differs", len(drops.get("verdict differs between export and fetch book", [])) == 0,
+         "export rows dropped as 'verdict differs between export and fetch book' = %d (must be 0)" % len(drops.get("verdict differs between export and fetch book", []))),
+        ("side_tier_inconsistent", len(drops.get("Side/Tier inconsistent with Verdict", [])) == 0,
+         "export rows dropped as 'Side/Tier inconsistent with Verdict' = %d (must be 0)" % len(drops.get("Side/Tier inconsistent with Verdict", []))),
+        # Run 2 has no pinned version yet, so this gate FAILS for run 2 until the run-2 rider (RV-4) pins one: run 2 cannot
+        # read outcomes under a settings version nobody pre-registered.
+        ("settings_version", pin_v is not None and cx.cfg["version"] == pin_v,
+         "settings.json version %s, pinned %s%s" % (cx.cfg["version"], pin_v if pin_v is not None else "none",
+                                                    " (run 2: not pinned yet, the run-2 rider RV-4 must pin it)" if pin_v is None else " (run 1)")),
+    ]
+    cx.p("- Pre-outcome gates (full mode STOPs on any FAIL before an outcome column is opened; counts-only prints them and goes on):")
+    for name, ok, text in gates:
+        cx.p("  - %s %s: %s" % ("PASS" if ok else "FAIL", name, text))
+    failed = [name for name, ok, _ in gates if not ok]
+    info = {"pop": pop, "ref": ref, "refx": x, "drops": drops, "why": why, "extra": len(extra), "arm_diff": arm_diff,
+            "miss": miss, "gates_failed": failed}
     if opt.counts_only:
         cx.p()
         cx.p("COUNTS ONLY: exiting before any outcome column is opened.")
         return cx, info, None
+    if failed:
+        cx.p()
+        cx.p("STOP: pre-outcome gate(s) failed: %s. No outcome column was opened." % ", ".join(failed))
+        raise GateStop(cx, failed)
     results = run_full(cx, pop, opt)
     return cx, info, results
 
@@ -842,12 +930,16 @@ BOOK_HDR = BOOK_NEED + ["InstanceId"]
 NDAYS = 80   # weekdays from 2026-08-03 to 2026-11-20: spans the ASIA/LONDON seam (2026-10-25) and the NY seam (2026-11-01)
 
 
-def st_build(tmp, null_case, seed, flip=False):
-    """Synthetic fetch folder + export. 60 weekdays from 2026-08-03, three sessions; per session-day 5 A rows, each with
-    two B rows of the same stratum (fifth, band, POC era), plus C, O and excluded rows. Effect case: A EV = +5 + noise,
-    B EV = noise. Null case: each B row carries its A row's EV, so the re-weighted A - B is exactly 0 in every resample.
-    Flip case (AT-2): A EV = -4 + noise before the row's session seam and +40 + noise from it, B EV = noise, so the pooled
-    A - B is positive and the pre-seam-only A - B is negative: "SEAM-SENSITIVE" must appear on the BO-H1 label."""
+def st_build(tmp, null_case, seed, flip=False, const=False):
+    """Synthetic fetch folder + export. NDAYS (80) weekdays from 2026-08-03, three sessions; per session-day 5 A rows, each
+    with two B rows of the same stratum (fifth, band, POC era, seam era), plus C, O and excluded rows. Effect case: A EV =
+    +5 + noise, B EV = noise. Null case: each B row carries its A row's EV, so the re-weighted A - B is exactly 0 in every
+    resample. Flip case (AT-2): A EV = -4 + noise before the row's session seam and +40 + noise from it, B EV = noise, so
+    the pooled A - B is positive and the pre-seam-only A - B is negative: "SEAM-SENSITIVE" must appear on the BO-H1 label.
+    Const case (review finding RV-3), no noise: every B row (S_add included) EV = 0; A EV = +2 before the POC edge, -10
+    from the POC edge to the row's session seam, +40 from the seam. So the pre-POC-only A - B is positive (same sign as
+    the pooled one: no EDGE-SENSITIVE) while the pre-seam-only A - B is negative (SEAM-SENSITIVE): the seam filter and
+    the POC filter give opposite signs. And S_add rows (EV 0) dilute BO-H2's upgraded set by a known amount."""
     rng = random.Random(seed)
     fetch = os.path.join(tmp, "fetch"); os.makedirs(fetch)
     mids = {"ASIA": [25.0, 40.0, 60.0, 75.0, 95.0], "LONDON": [25.0, 40.0, 60.0, 80.0, 100.0], "NY": [15.0, 25.0, 37.0, 50.0, 70.0]}
@@ -876,7 +968,8 @@ def st_build(tmp, null_case, seed, flip=False):
              "InstanceId": "synthetic01"}
         e = {"Timestamp": b["Timestamp"], "Session": sess, "Side": side, "Tier": band, "Verdict": b["Verdict"], "Price": b["Price"],
              "Atr": b["ATR"], "AggrVelSignal": sig_, "MaxScore": "19", "EffectiveLongScore": str(el), "EffectiveShortScore": str(es),
-             "InstanceId": "synthetic01", "TBps": "%.4f" % (2 * atr / price * 1e4), "SBps": "%.4f" % (1.5 * atr / price * 1e4)}
+             "InstanceId": "synthetic01", "TBps": "%.4f" % (2 * atr / price * 1e4), "SBps": "%.4f" % (1.5 * atr / price * 1e4),
+             "MainMissingBars": "0"}
         return b, e
     for di, day in enumerate(days):
         for s in SESS_ORDER:
@@ -892,9 +985,10 @@ def st_build(tmp, null_case, seed, flip=False):
                 tfi = "BUY PRESSURE" if side == "LONG" else "SELL PRESSURE"
                 burst = "BURST_BUY" if side == "LONG" else "BURST_SELL"
                 sg = 1 if side == "LONG" else -1
-                if flip: mu_a = -4.0 if t < SEAM[s] else 40.0
+                if const: mu_a = 2.0 if t < POC_EDGE else (-10.0 if t < SEAM[s] else 40.0)
+                elif flip: mu_a = -4.0 if t < SEAM[s] else 40.0
                 else: mu_a = 0.0 if null_case else 5.0
-                ev_a = mu_a + rng.gauss(0, 10)
+                ev_a = mu_a if const else mu_a + rng.gauss(0, 10)
                 b, e = mk(nts(), s, side, band, fifth, tfi, burst, 9.5, sg * 100.0)
                 e["MainNetEv"] = "%.6f" % ev_a; e["MainOutcome"] = "1" if ev_a > 0 else "2"
                 book_rows.append(b); export_rows.append(e)
@@ -902,7 +996,7 @@ def st_build(tmp, null_case, seed, flip=False):
                 for k in range(2):
                     ratio = 9.5 if (j == 0 and k == 0) else 1.0   # one S_add per session-day
                     b, e = mk(nts(), s, side, band, fifth, tfi, "NORMAL", ratio, sg * 50.0)
-                    ev_b = ev_a if null_case else rng.gauss(0, 10)
+                    ev_b = 0.0 if const else (ev_a if null_case else rng.gauss(0, 10))
                     e["MainNetEv"] = "%.6f" % ev_b; e["MainOutcome"] = "1" if ev_b > 0 else "2"
                     book_rows.append(b); export_rows.append(e)
                     expect[s]["B"] += 1
@@ -945,15 +1039,181 @@ def st_build(tmp, null_case, seed, flip=False):
     write_book("analysis_log.csv.116col-00000000.20260920_000000.bak", rot_rows, rot_hdr)
     write_book("analysis_log.csv", live, BOOK_HDR)
     ex = os.path.join(tmp, "export.csv")
-    ehdr = SIGNAL_COLS + OUTCOME_COLS
+    ehdr = SIGNAL_COLS + COVERAGE_COLS + OUTCOME_COLS
     with open(ex, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, lineterminator="\n"); w.writerow(ehdr)
         for e in export_rows: w.writerow([e[c] for c in ehdr])
     ex_sig = os.path.join(tmp, "export-signal-only.csv")   # no outcome column at all: --counts-only must still run
     with open(ex_sig, "w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f, lineterminator="\n"); w.writerow(SIGNAL_COLS)
-        for e in export_rows: w.writerow([e[c] for c in SIGNAL_COLS])
+        w = csv.writer(f, lineterminator="\n"); w.writerow(SIGNAL_COLS + COVERAGE_COLS)
+        for e in export_rows: w.writerow([e[c] for c in SIGNAL_COLS + COVERAGE_COLS])
     return fetch, ex, ex_sig, expect
+
+
+def st_root(tmp, real_root, version):
+    """A settings root for the selftest: the tracked settings.json copied, with only "version" set. The selftest tests the
+    code; the real run's settings_version gate reads the real file."""
+    rt = os.path.join(tmp, "root"); os.makedirs(rt, exist_ok=True)
+    cfg = json.load(open(os.path.join(real_root, "settings.json"), encoding="utf-8-sig"))
+    cfg["version"] = version
+    with open(os.path.join(rt, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump(cfg, f)
+    return rt
+
+
+def quiet_run(o):
+    with open(os.devnull, "w", encoding="utf-8") as dn:
+        so = sys.stdout; sys.stdout = dn
+        try:
+            return run(o)
+        finally:
+            sys.stdout = so
+
+
+def st_draws(center, n=10000, spread=10.0):
+    """Evenly spaced draws, so every bootstrap p is known exactly (the review's H-7 unit check)."""
+    return sorted(center - spread + 2 * spread * i / (n - 1) for i in range(n))
+
+
+def selftest_holm(check):
+    """Deterministic Holm and label assertions (review handle H-7, finding RV-3). Draws centred at c, spread 10, give
+    p = 2 x (10 - c) / 20: c 9.9 -> 0.01, 9.7 -> 0.03, 9.6 -> 0.04."""
+    print("\n==== SELFTEST case: Holm step-down and the TB-D5 label (deterministic draws) ====")
+    mk = lambda c, lab: {"draws": st_draws(c), "label": lab, "res": {"FULL": (c, 0.0, 0.0, [200, 200])}}
+    Rr = {"ASIA": mk(9.9, "CONFIRMED (d > 0)"), "LONDON": mk(9.7, "CONFIRMED (d > 0)"), "NY": mk(9.6, "CONFIRMED (d > 0)")}
+    holm(Rr, 3)
+    for s in SESS_ORDER:
+        finalize_label(Rr[s], None, None)
+    check(abs(Rr["ASIA"]["p"] - 0.01) < 1e-9 and abs(Rr["LONDON"]["p"] - 0.03) < 1e-9 and abs(Rr["NY"]["p"] - 0.04) < 1e-9,
+          "Holm unit: boot p = 0.01 / 0.03 / 0.04 (got %.4f / %.4f / %.4f)" % (Rr["ASIA"]["p"], Rr["LONDON"]["p"], Rr["NY"]["p"]))
+    check(abs(Rr["ASIA"]["alpha"] - 0.05 / 3) < 1e-12 and abs(Rr["LONDON"]["alpha"] - 0.05 / 2) < 1e-12 and abs(Rr["NY"]["alpha"] - 0.05) < 1e-12,
+          "Holm unit: alpha_i = 0.05/3, 0.05/2, 0.05 by rank")
+    check(Rr["ASIA"]["reject"] is True, "Holm unit: ASIA (p 0.01 <= 0.0167) passes Holm")
+    check(Rr["LONDON"]["reject"] is False, "Holm unit: LONDON (p 0.03 > 0.025) is stopped")
+    check(Rr["NY"]["p"] <= 0.05 and Rr["NY"]["reject"] is False,
+          "Holm unit: NY is NOT passed although its own p 0.04 <= 0.05 - the step-down stopped at LONDON")
+    check(Rr["ASIA"]["final"] == "CONFIRMED (d > 0)", "Holm unit: ASIA final label CONFIRMED (d > 0) (got %r)" % Rr["ASIA"]["final"])
+    want = "NOT CONFIRMED: HALVES AGREE, HOLM-ADJUSTED FULL CI INCLUDES 0 (d > 0)"
+    check(Rr["LONDON"]["final"] == want and Rr["NY"]["final"] == want,
+          "Holm unit: LONDON and NY reach the TB-D5 label %r (got %r / %r)" % (want, Rr["LONDON"]["final"], Rr["NY"]["final"]))
+    R2 = {"ASIA": mk(9.9, "CONFIRMED (d > 0)"), "LONDON": mk(9.0, "NOT READABLE"), "NY": mk(9.9, "CONFIRMED (d > 0)")}
+    holm(R2, 3)
+    for s in SESS_ORDER:
+        finalize_label(R2[s], None, None)
+    check(R2["LONDON"]["p"] == 1.0 and abs(R2["LONDON"]["alpha"] - 0.05) < 1e-12 and R2["LONDON"]["reject"] is False
+          and R2["LONDON"]["final"] == "NOT READABLE", "Holm unit: a NOT READABLE session enters with p = 1, ranks last, is not passed")
+    check(abs(min(R2["ASIA"]["alpha"], R2["NY"]["alpha"]) - 0.05 / 3) < 1e-12 and abs(max(R2["ASIA"]["alpha"], R2["NY"]["alpha"]) - 0.05 / 2) < 1e-12
+          and R2["ASIA"]["reject"] and R2["NY"]["reject"], "Holm unit: the two readable sessions get 0.05/3 and 0.05/2 and both pass")
+
+
+def selftest_run_pins(check):
+    """--run pins (RV-2): a full read cannot start unpinned, and a pinned run takes no free window, seed or resamples."""
+    print("\n==== SELFTEST case: run pins (argument resolution) ====")
+    ap = build_parser()
+    def res(argv):
+        try:
+            return resolve_run(ap.parse_args(argv)), None
+        except ValueError as ex:
+            return None, str(ex)
+    for argv, why in (([], "full mode without --run"), (["--run", "1", "--cut-before", "2026-12-01T00:00:00Z"], "--run 1 with --cut-before"),
+                      (["--run", "1", "--from", "2026-09-01T00:00:00Z"], "--run 1 with --from"), (["--run", "1", "--seed", "1"], "--run 1 with --seed"),
+                      (["--run", "1", "--resamples", "500"], "--run 1 with --resamples"), (["--run", "2"], "--run 2 without --from"),
+                      (["--run", "2", "--from", "2026-11-01T00:00:00Z"], "--run 2 --from before the run-1 cut"),
+                      (["--run", "2", "--from", "2026-12-07T00:00:00Z", "--cut-before", "2027-01-01T00:00:00Z"], "--run 2 with --cut-before")):
+        o, err = res(argv)
+        check(o is None and err, "run pins: refused: %s (%s)" % (why, err))
+    o, err = res(["--run", "1"])
+    check(err is None and o.cut_before == RUN1_CUT and o.from_ is None and o.seed == 20260928 and o.resamples == 10000,
+          "run pins: --run 1 gives Timestamp < 2026-11-25 00:00:00, seed 20260928, 10,000 resamples")
+    o, err = res(["--run", "2", "--from", "2026-12-07T00:00:00Z"])
+    check(err is None and o.from_ == datetime(2026, 12, 7) and o.cut_before is None and o.seed == 20260928 and o.resamples == 10000,
+          "run pins: --run 2 --from 2026-12-07 is accepted with the same seed and resamples")
+    o, err = res(["--counts-only", "--cut-before", "2026-09-01T00:00:00Z"])
+    check(err is None and o.cut_before == datetime(2026, 9, 1) and o.run is None, "run pins: counts-only keeps a free window")
+
+
+def st_edit_csv(path, ts, edit):
+    """Rewrites every row of a synthetic CSV whose Timestamp is ts, applying edit(row_dict). Keeps the column order."""
+    with open(path, encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    h = rows[0]; it = h.index("Timestamp"); n = 0
+    for i in range(1, len(rows)):
+        if rows[i] and rows[i][it] == ts:
+            d = dict(zip(h, rows[i])); edit(d); rows[i] = [d[c] for c in h]; n += 1
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        csv.writer(f, lineterminator="\r\n" if "analysis_log" in os.path.basename(path) else "\n").writerows(rows)
+    return n
+
+
+def selftest_gates(real_root, check, resamples):
+    """Pre-outcome gates (RV-1, RV-2). Each variant breaks ONE check on one NY arm-A row (or the settings version); full
+    mode must STOP naming exactly that check before an outcome column is opened, and counts-only must print it and go on."""
+    print("\n==== SELFTEST case: pre-outcome gates (one broken check per variant) ====")
+    tmp = tempfile.mkdtemp(prefix="burst_selftest_gates_")
+    try:
+        fetch0, ex0, _, _ = st_build(os.path.join(tmp, "base"), True, 20260929)
+        with open(ex0, encoding="utf-8", newline="") as f:
+            # ATR 15.0 = fifth 1 under both the NY and the LONDON edges, so the session_mismatch variant moves no fifth
+            target = next(r for r in csv.DictReader(f) if r["Session"] == "NY" and r["Side"] == "LONG" and r["AggrVelSignal"] == "BURST_BUY"
+                          and r["Atr"] == "15.0")
+        ts = target["Timestamp"]
+        other_tier = "STRONG" if target["Tier"] != "STRONG" else "WEAK"
+        other_atr = "70.0"   # NY fifth 5
+        short_v = {"STRONG": "STRONG SHORT", "MEDIUM": "SHORT", "WEAK": "WEAK SHORT"}[target["Tier"]]
+        variants = [
+            ("missing_bars", "export", lambda d: d.update(MainMissingBars="3"), None),
+            ("session_mismatch", "export", lambda d: d.update(Session="LONDON"), None),
+            ("signal_mismatch", "export", lambda d: d.update(AggrVelSignal="NORMAL"), None),
+            ("verdict_differs", "export", lambda d: d.update(Verdict=short_v), None),
+            ("side_tier_inconsistent", "export", lambda d: d.update(Tier=other_tier), None),
+            ("arm_diff", "export", lambda d: d.update(Atr=other_atr), None),
+            ("extra", "books", lambda d: d.update(PlacedTargetLong="0.0"), None),
+            ("settings_version", None, None, RUN_SETTINGS_VERSION["1"] + 1),
+        ]
+        for name, where, edit, version in variants:
+            vt = os.path.join(tmp, "v_" + name)
+            shutil.copytree(os.path.dirname(fetch0), vt)
+            fetch, ex = os.path.join(vt, "fetch"), os.path.join(vt, "export.csv")
+            n_ed = 0
+            if where == "export":
+                n_ed = st_edit_csv(ex, ts, edit)
+            elif where == "books":
+                for bp in book_names(fetch):
+                    n_ed += st_edit_csv(bp, ts, edit)
+            rt = st_root(vt, real_root, version if version is not None else RUN_SETTINGS_VERSION["1"])
+            base = dict(root=rt, export=ex, fetch=fetch, pooled=None, from_=None, resamples=resamples, seed=RUN_SEED, selftest_quiet=True)
+            got = None
+            try:
+                quiet_run(argparse.Namespace(**dict(base, run="1", cut_before=RUN1_CUT, counts_only=False)))
+            except GateStop as g:
+                got = g.names
+            check(got == [name], "gate %s: full mode STOPs naming exactly [%s] before any outcome column (edited %d rows; got %s)" % (name, name, n_ed, got))
+            cx, info, res_ = quiet_run(argparse.Namespace(**dict(base, run=None, cut_before=None, counts_only=True)))
+            check(res_ is None and info["gates_failed"] == [name] and any(ln.startswith("  - FAIL %s:" % name) for ln in cx.out),
+                  "gate %s: counts-only prints FAIL %s and does not stop (got %s)" % (name, name, info["gates_failed"]))
+            if name == "missing_bars":
+                check(info["miss"][("NY", "A")] == 1 and sum(info["miss"].values()) == 1,
+                      "gate missing_bars: the coverage line counts the row under NY arm A only")
+        # full mode refuses to start unpinned, even when a caller bypasses main()
+        rt = st_root(os.path.join(tmp, "base"), real_root, RUN_SETTINGS_VERSION["1"])
+        for run_id, cut, why in ((None, None, "no --run"), ("1", None, "--run 1 without its cut")):
+            try:
+                quiet_run(argparse.Namespace(root=rt, export=ex0, fetch=fetch0, pooled=None, from_=None, resamples=resamples,
+                                             seed=RUN_SEED, selftest_quiet=True, run=run_id, cut_before=cut, counts_only=False))
+                refused = False
+            except SystemExit:
+                refused = True
+            check(refused, "run(): full mode refuses to start with %s" % why)
+        # run 2 has no pinned settings version yet: its full mode must STOP on settings_version
+        got = None
+        try:
+            quiet_run(argparse.Namespace(root=rt, export=ex0, fetch=fetch0, pooled=None, from_=datetime(2026, 12, 7), resamples=resamples,
+                                         seed=RUN_SEED, selftest_quiet=True, run="2", cut_before=None, counts_only=False))
+        except GateStop as g:
+            got = g.names
+        check(got is not None and "settings_version" in got, "gate settings_version: --run 2 STOPs while run 2 has no pinned version (got %s)" % got)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def selftest(root, resamples):
@@ -961,23 +1221,26 @@ def selftest(root, resamples):
     def check(cond, msg):
         print(("PASS  " if cond else "FAIL  ") + msg)
         if not cond: fails.append(msg)
-    for case, null_case, flip in (("effect (A = +5 bps, B = 0, noise sd 10)", False, False), ("null (B rows carry their A row's EV)", True, False),
-                                  ("seam flip (A = -4 bps before the session seam, +40 from it, B = 0)", False, True)):
+    # fast deterministic units first (review finding RV-3; findings RV-1 and RV-2 gates)
+    selftest_holm(check)
+    selftest_run_pins(check)
+    selftest_gates(root, check, resamples)
+    for case, null_case, flip, const in (("effect (A = +5 bps, B = 0, noise sd 10)", False, False, False),
+                                         ("null (B rows carry their A row's EV)", True, False, False),
+                                         ("seam flip (A = -4 bps before the session seam, +40 from it, B = 0)", False, True, False),
+                                         ("const (no noise; B = 0; A = +2 before the POC edge, -10 from it to the seam, +40 from the seam)", False, False, True)):
         tmp = tempfile.mkdtemp(prefix="burst_selftest_")
         try:
-            fetch, ex, ex_sig, expect = st_build(tmp, null_case, 20260929, flip)
-            base = dict(root=root, export=ex, fetch=fetch, pooled=None, cut_before=None, from_=None, resamples=resamples,
-                        seed=20260928, selftest_quiet=True)
+            fetch, ex, ex_sig, expect = st_build(tmp, null_case, 20260929, flip, const)
+            rt = st_root(tmp, root, RUN_SETTINGS_VERSION["1"])
+            base = dict(root=rt, export=ex, fetch=fetch, pooled=None, cut_before=None, from_=None, resamples=resamples,
+                        seed=RUN_SEED, selftest_quiet=True, run=None)
             print("\n==== SELFTEST case: %s ====" % case)
             # counts-only on an export with NO outcome column
             o = argparse.Namespace(**dict(base, export=ex_sig, counts_only=True))
-            with open(os.devnull, "w") as dn:
-                so = sys.stdout; sys.stdout = dn
-                try:
-                    cx, info, res = run(o)
-                finally:
-                    sys.stdout = so
+            cx, info, res = quiet_run(o)
             check(res is None, "counts-only runs on an export that has no outcome column, and returns no outcome")
+            check(info["gates_failed"] == [] and sum(info["miss"].values()) == 0, "counts-only: every pre-outcome gate passes on clean synthetic data, 0 missing-bar rows")
             for s in SESS_ORDER:
                 got = {a: sum(1 for r in info["pop"] if r["s"] == s and r["arm"] == a) for a in "ABCO"}
                 got["S_add"] = sum(1 for r in info["pop"] if r["s"] == s and r["sh"] == "S_add")
@@ -990,14 +1253,9 @@ def selftest(root, resamples):
             check(info["extra"] == 0 and info["arm_diff"] == 0, "analysis rows are a subset of the power-count rows with identical arms")
             nwhy = sum(len(v) for k, v in info["why"].items() if k.startswith("export:"))
             check(nwhy == 1, "1 book row missing from the export is counted as an export drop (got %d)" % nwhy)
-            # full pipeline
-            o = argparse.Namespace(**dict(base, counts_only=False))
-            with open(os.devnull, "w") as dn:
-                so = sys.stdout; sys.stdout = dn
-                try:
-                    cx, info, res = run(o)
-                finally:
-                    sys.stdout = so
+            # full pipeline, as a pinned run 1 (every synthetic row is before the run-1 cut)
+            o = argparse.Namespace(**dict(base, counts_only=False, run="1", cut_before=RUN1_CUT))
+            cx, info, res = quiet_run(o)
             # AT-2 seam checks. Failing inputs: (a) two rows identical but for the seam must key to different strata (fails if the
             # seam term is dropped from strat_key); (b) the analysis population must hold rows on both sides of EVERY session's
             # seam, and the era printout must carry the seam line (fails if the seam field or the printout is missing).
@@ -1012,7 +1270,28 @@ def selftest(root, resamples):
                 x = res[("BO-H1", s)]
                 pt, lo, hi = x["res"]["FULL"][:3]
                 print("      %s BO-H1 FULL d = %s  Holm CI [%s, %s]  label: %s" % (s, ci(pt, lo, hi), f1(x["hci"][0]), f1(x["hci"][1]), x["final"]))
-                if flip:
+                # ALL_LABELS carries the A - B direction, not rw_run's B - A (RV-6)
+                al = [e_ for e_ in ALL_LABELS if e_[0] == "BO-H1 " + s]
+                check(len(al) == 1 and al[0][2] == x["label"] and al[0][3][0] == pt, "%s ALL_LABELS entry for BO-H1 matches the A - B result" % s)
+                if const:
+                    # Failing inputs: a seam sensitivity run filtered on the POC era gives +2 here (no SEAM-SENSITIVE); a
+                    # BO-H2 upgraded set without S_add gives the A-only mean, not the S_add-diluted one.
+                    A_ = [r for r in info["pop"] if r["s"] == s and r["arm"] == "A"]
+                    check(abs(pt - sum(r["ev_main"] for r in A_) / len(A_)) < 1e-9 and x["a_dropped"] == 0,
+                          "%s const BO-H1 FULL point = the mean A EV exactly (B = 0, every A stratum covered): %+.4f" % (s, pt))
+                    check(x.get("edge_pt") is not None and x["edge_pt"] > 0 and pt > 0 and x.get("seam_pt") is not None and x["seam_pt"] < 0,
+                          "%s const: pre-POC-only d > 0, pooled d > 0, pre-seam-only d < 0 (pre-POC %s, pooled %+.2f, pre-seam %s)" % (s, x.get("edge_pt"), pt, x.get("seam_pt")))
+                    check("SEAM-SENSITIVE" in x["final"] and "EDGE-SENSITIVE" not in x["final"],
+                          "%s const label carries SEAM-SENSITIVE and not EDGE-SENSITIVE (got %r)" % (s, x["final"]))
+                    y = res[("BO-H2", s)]
+                    A45 = [r for r in info["pop"] if r["s"] == s and r["arm"] == "A" and r["fifth"] >= 4]
+                    S45 = [r for r in info["pop"] if r["s"] == s and r["sh"] == "S_add" and r["fifth"] >= 4]
+                    want2 = sum(r["ev_main"] for r in A45) / (len(A45) + len(S45))
+                    a_only = sum(r["ev_main"] for r in A45) / len(A45)
+                    p2 = y["res"]["FULL"][0]
+                    check(len(S45) > 0 and abs(want2 - a_only) > 0.1 and abs(p2 - want2) < 1e-9,
+                          "%s const BO-H2 FULL point = sum(A EV) / (nA + nS_add) over fifths 4-5 = %+.4f (got %+.4f; A only would be %+.4f)" % (s, want2, p2, a_only))
+                elif flip:
                     # the sensitivity run must exist, must have the opposite sign, and the label must say so
                     sqv = x.get("seam_pt")
                     check(sqv is not None and sqv < 0 < pt, "%s BO-H1 pooled d > 0 and pre-seam-only d < 0 (pooled %+.2f, pre-seam %s)" % (s, pt, sqv))
@@ -1026,44 +1305,87 @@ def selftest(root, resamples):
                     check(abs(pt) < 1e-9 and abs(lo) < 1e-9 and abs(hi) < 1e-9, "%s BO-H1 A - B is exactly 0 in every resample" % s)
                     check(x["final"] == "NO DIFFERENCE SHOWN", "%s BO-H1 label is NO DIFFERENCE SHOWN" % s)
             check(any(ln.startswith("### 3.3 BO-H2") for ln in cx.out), "BO-H2 table printed")
+            check(sum(1 for ln in cx.out if ln.startswith("| Session | Strata |") and "| Holm passed |" in ln) == 2,
+                  "BO-H1 and BO-H2 tables carry the Holm passed column (RV-5)")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
     print("\nSELFTEST %s (%d failed)" % ("PASSED" if not fails else "FAILED", len(fails)))
     return 0 if not fails else 1
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=".")
     ap.add_argument("--export", default=None)
     ap.add_argument("--fetch", default=None)
     ap.add_argument("--pooled", default=None)
-    ap.add_argument("--cut-before", dest="cut_before", default=None, help="run 1: 2026-11-25T00:00:00Z")
-    ap.add_argument("--from", dest="from_", default=None, help="run 2: 2026-11-25T00:00:00Z")
+    ap.add_argument("--run", choices=["1", "2"], default=None,
+                    help="the pre-registered run. 1: pins Timestamp < 2026-11-25T00:00:00Z, seed 20260928, 10,000 resamples. "
+                         "2: needs --from (the first row after the session-hours deploy, >= the run-1 cut); same seed and resamples")
+    ap.add_argument("--cut-before", dest="cut_before", default=None, help="counts-only window; --run 1 sets it")
+    ap.add_argument("--from", dest="from_", default=None, help="counts-only window; required with --run 2")
     ap.add_argument("--counts-only", dest="counts_only", action="store_true")
     ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--resamples", type=int, default=10000, help="10,000 = the house rule")
-    ap.add_argument("--seed", type=int, default=20260928)
+    ap.add_argument("--resamples", type=int, default=None, help="default 10,000 = the house rule; --run pins it")
+    ap.add_argument("--seed", type=int, default=None, help="default 20260928; --run pins it")
     ap.add_argument("--out", default=None)
+    return ap
+
+
+def resolve_run(o):
+    """Applies the run pins (RV-2) to parsed arguments, in place. Raises ValueError naming the conflict. A pinned run takes
+    no free window, seed or resamples argument, so a run cannot drift from its pre-registration by a typo or an omission."""
+    o.cut_before = parse_when(o.cut_before) if isinstance(o.cut_before, str) else o.cut_before
+    o.from_ = parse_when(o.from_) if isinstance(o.from_, str) else o.from_
+    if o.run is not None:
+        for flag, val in (("--seed", o.seed), ("--resamples", o.resamples)):
+            if val is not None:
+                raise ValueError("--run %s pins %s; do not pass it" % (o.run, flag))
+        if o.run == "1":
+            if o.cut_before is not None or o.from_ is not None:
+                raise ValueError("--run 1 pins the window (Timestamp < %s); do not pass --cut-before or --from" % RUN1_CUT)
+            o.cut_before = RUN1_CUT
+        else:
+            if o.from_ is None:
+                raise ValueError("--run 2 needs --from <the first row after the session-hours deploy>")
+            if o.from_ < RUN1_CUT:
+                raise ValueError("--run 2 --from %s is before the run-1 cut %s; the two runs must be disjoint" % (o.from_, RUN1_CUT))
+            if o.cut_before is not None:
+                raise ValueError("--run 2 takes no --cut-before")
+    elif not o.counts_only:
+        raise ValueError("full mode runs only as --run 1, or --run 2 --from <ts> (docs/burst-outcome-read-spec.md section 6.1)")
+    o.seed = RUN_SEED if o.seed is None else o.seed
+    o.resamples = RUN_RESAMPLES if o.resamples is None else o.resamples
+    return o
+
+
+def main():
+    ap = build_parser()
     o = ap.parse_args()
     root = os.path.abspath(o.root)
     if o.selftest:
-        return selftest(root, o.resamples)
+        return selftest(root, o.resamples or RUN_RESAMPLES)
     if not o.export or not o.fetch:
         ap.error("--export and --fetch are required")
+    try:
+        resolve_run(o)
+    except ValueError as ex:
+        ap.error(str(ex))
     J = lambda p_: p_ if os.path.isabs(p_) else os.path.join(root, p_)
     o.root = root; o.export = J(o.export); o.fetch = J(o.fetch); o.pooled = J(o.pooled) if o.pooled else None
-    o.cut_before = parse_when(o.cut_before) if o.cut_before else None
-    o.from_ = parse_when(o.from_) if o.from_ else None
     o.selftest_quiet = False
-    cx, _, _ = run(o)
+    rc = 0
+    try:
+        cx, _, _ = run(o)
+    except GateStop as g:
+        cx, rc = g.cx, 2
     outp = o.out or os.path.join(root, "backtest_data", "burst-outcome-read",
                                  "burst-outcome-counts-output.md" if o.counts_only else "burst-outcome-read-output.md")
     os.makedirs(os.path.dirname(J(outp)), exist_ok=True)
     with open(J(outp), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(cx.out) + "\n")
     print("- Wrote " + J(outp))
-    return 0
+    return rc
 
 
 if __name__ == "__main__":
