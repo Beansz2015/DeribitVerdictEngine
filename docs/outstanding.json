@@ -1,35 +1,12 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-02T20:05Z",
+  "updated_utc": "2026-10-03T20:00Z",
   "updated_by": "seat orchestrator (handover 2026-10-01 seat), Opus 5.5 — every row checked against git and the D-tables",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
-    {
-      "kind": "push",
-      "meaning": "Push master — 22 commits ahead of origin, docs and tools only (no engine code)",
-      "since": "2026-10-02"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "A4L-10",
-      "meaning": "The liquidation × OFI study is unreadable (28 events; n ≥ 100 per arm ~2028). Keep it sealed, and add a separate trade-flow study on the earlier 18 months?",
-      "doc": "docs/a4-liq-ofi-logged-era-study-spec.md",
-      "anchor": "§9 decision table, row A4L-10",
-      "since": "2026-10-02"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "A4L-9",
-      "meaning": "Multiplicity for that study: Holm across all three tests (orchestrator) or primary alone plus a secondary family (agent)",
-      "doc": "docs/a4-liq-ofi-logged-era-study-spec.md",
-      "anchor": "§9 decision table, row A4L-9",
-      "since": "2026-10-02"
-    },
     {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
@@ -50,7 +27,7 @@
     {
       "date": "2026-10-04",
       "approx": true,
-      "what": "Fetch with history comparison (collector.ps1 fetch; a FAIL verdict stops the plan). The last fetch ran 2026-10-02, comparison PASS",
+      "what": "Fetch with history comparison — also re-count the sealed liquidation × OFI study (tools/ops/a4_liq_ofi_counts.py)",
       "doc": "docs/seat-handover-2026-10-01.md",
       "anchor": "§0 FIRST ACTIONS item 5"
     },
@@ -64,7 +41,7 @@
     {
       "date": "2026-10-08",
       "approx": true,
-      "what": "Fetch with history comparison",
+      "what": "Fetch with history comparison — also re-count the sealed liquidation × OFI study (tools/ops/a4_liq_ofi_counts.py)",
       "doc": "docs/seat-handover-2026-10-01.md",
       "anchor": "§0 FIRST ACTIONS item 5"
     },
@@ -95,6 +72,12 @@
     }
   ],
   "next_up": [
+    {
+      "what": "Write the pre-registered spec for a trade-flow-flip study after liquidation clusters, trade store only, 2025-01-01 → 2026-07-02 (keeps the sealed OFI-flip study outcome-blind)",
+      "doc": "docs/a4-liq-ofi-logged-era-study-spec.md",
+      "anchor": "§9 RULED box",
+      "model": "Opus 5.5, high"
+    },
     {
       "what": "Adversarial review of the indicator review pack, in a fresh seat — attack its order and classes",
       "doc": "docs/indicator-calibration-review-2026-10-02.md",
