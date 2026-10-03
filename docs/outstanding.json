@@ -8,6 +8,11 @@
   },
   "waiting_on_trader": [
     {
+      "kind": "push",
+      "meaning": "Push master — 2 commits ahead of origin, docs only (rulings record + this pane update)",
+      "since": "2026-10-04"
+    },
+    {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
