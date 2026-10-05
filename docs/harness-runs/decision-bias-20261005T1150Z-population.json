@@ -1,0 +1,367 @@
+{
+ "rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+ "rev7": "4d5c6ae",
+ "stamp_utc": "20261005T1150Z",
+ "builder": "trade-flow study session-1 seat, by hand",
+ "note": "STATE ONLY. Live recommendations.",
+ "items": [
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-1@4d5c6ae",
+   "question": "Pre-registered study: after a large liquidation cluster (onset T0), where does the window that measures taker aggressor imbalance start? The flow measure must not overlap the cascade.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Start after the cascade's last liquidation print; any later liquidation print resets the start; knowable in real time at the window end",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "A fixed offset from the onset, e.g. T0 + 60 s",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "After the episode ends by the 30-minute de-clustering rule (30 min with no large firing)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "The episode's last firing trade, identified in hindsight",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(d) is mechanically wrong: it conditions on the future absence of more liquidations, which biases toward reversal. (c) guarantees no overlap with the 30-min episode, but it measures flow 30+ minutes later, a different and stale state that does not test 'flow flips immediately after the cascade'. (b) overlaps the cascade whenever the cascade lasts longer than the offset, which makes 'no flip' likely by construction.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-2@4d5c6ae",
+   "question": "How long a buffer after the last liquidation print before the flow window opens?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "No buffer (Q = 0) as primary; a 30 s buffer printed as a descriptive variant",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "30 s buffer as primary",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "No buffer only, no variant",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a) is closest to the hypothesis ('immediately afterward') and still records the 30 s variant, so it holds everything (b) and (c) hold.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-3@4d5c6ae",
+   "question": "Flow window type and length for the aggressor-imbalance measure after the cascade.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "60 s time window as primary; 30 s, 120 s and the engine's 30-trade TFI window printed as descriptive variants",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "The engine TFI window (last 30 trades) as primary",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "120 s time window as primary",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Measured outcome-blind: a 60 s window after a cascade holds a median 356 trades, so 30 trades is about 5 seconds, often one sweep. A time window keeps one meaning across sessions. All variants are recorded anyway.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-4@4d5c6ae",
+   "question": "Drop rules for events whose flow window cannot be measured.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Drop and count: window end more than 30 min after onset (cascade never quiet), or fewer than 10 non-liquidation trades in the window",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "No cap: wait as long as needed",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "10-minute cap",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The 30-min cap equals the ruled de-clustering gap; beyond it the flow belongs to a later episode. Every drop is counted by reason. Measured: 0 cap drops and 3 thin drops of 416 events.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-5@4d5c6ae",
+   "question": "Source of the FLIP threshold for the imbalance (must come from signal-side data, never outcomes).",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Per-session tercile edges of the signed imbalance over a reference grid of non-event windows (same window length), whole study span",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "The engine TFI threshold 0.15",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "Sign only: any imbalance against the cascade is a FLIP",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "Top quartile of absolute imbalance (narrower FLIP)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a) defines FLIP as flow against the cascade that is unusual for that session, about one third of windows at random, comparable with the sister OFI study's dominant share. (b) is calibrated for a 30-trade window, not 60 s. (c) labels noise as flips. (d) records nothing more and holds fewer FLIP. The continuous imbalance is recorded for all events anyway.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-6@4d5c6ae",
+   "question": "Step of the reference grid that supplies the threshold distribution and the flow-only control rows.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Every 15 minutes",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "Every 5 minutes (three times the rows)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "Random instants",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The binding count is FLIP (87); control is 31,158 rows at 15 min, so 3x control rows barely move the minimum detectable effect, and the threshold edges are already estimated from about 10,000-21,000 windows per session. (b) triples the outcome-walk work in session 2. My reason is that (a) is adequate, which is a cost argument.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-7@4d5c6ae",
+   "question": "Threshold span: whole-study terciles, or trailing (past-only) terciles as a live detector would see?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Whole-span per-session terciles decide; trailing 90-day terciles printed as a sensitivity and flagged in session 2 if the sign changes",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "Trailing 90-day only (loses early-2025 events without enough history)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "Whole-span only",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a) records both and keeps every event; (b) alone drops the first months. Measured: 68 of 78 classifiable FLIP stay FLIP under trailing terciles.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-8@4d5c6ae",
+   "question": "Outcome measure for the fade trade (defined now, computed only in session 2). No logged placed levels exist in 2025.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "House net EV per trade with the engine's ATR-fallback levels rebuilt from the tape (ATR(7) on execution-resolution candles; session target multiples, 1.6x stop), tape walk, session hold window",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "Fixed-horizon mark-to-market at the window end",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "(a) decides, (b) printed descriptively",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "Replay the engine over the history store to get its structural-first placed levels, then (c)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "(c) records both tape-based measures. (d) would carry the engine's real swing/HVN/POC levels, which is more faithful to what the engine would place, but it needs a replay build that is not verified to run on the history store. My reason against (d) is build cost.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-9@4d5c6ae",
+   "question": "Comparison arms.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "FLIP vs NO-FLIP only",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "plus FLIP vs zero",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "plus FLIP vs a flow-only control (same flow state with no cascade)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "(c) is the richest; it asks whether the cascade adds anything over following the flow alone.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-10@4d5c6ae",
+   "question": "Replication rule inside the readability label.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "House census label with chronological halves by event days; the three half-years (2025H1, 2025H2, 2026H1) printed descriptively",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "Require all three half-years to agree",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(b) cannot be read: each half-year holds 25-36 FLIP against the n >= 100 floor, so every half-year is NOT READABLE by construction. (a) is the copied, house method.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-11@4d5c6ae",
+   "question": "Weekends.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "All days kept; weekday/weekend split printed",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "Weekdays only",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Liquidations happen every day; the split shows any difference. Same as the sister study.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-12@4d5c6ae",
+   "question": "The pre-registered count gives FLIP 87 against the n >= 100 readability floor; the span is closed (2025-01-01 to 2026-07-02), so waiting adds nothing. What happens to session 2?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Run outcomes now as registered; every label NOT READABLE; confidence intervals bound the effect",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "Before any outcome, re-register a signal-side variant as primary (for example the 30-trade window, FLIP 113)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "Extend the span backward with a history-host backfill of earlier years, re-register on the longer span, then run",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "Close the study",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "(c) keeps the design and adds data, the only route that reaches the floor without changing the measure. (a) unseals the whole span, so any later redesign on it is no longer outcome-blind. (b) picks the primary after seeing signal-side counts, a degree of freedom. (d) discards a nearly readable study.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  }
+ ]
+}
