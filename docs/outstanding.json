@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-05T12:35Z",
-  "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — added the doc state register decisions (other rows from the orchestrator seat, 20:00Z)",
+  "updated_utc": "2026-10-05T12:42Z",
+  "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,22 +9,13 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 13 commits ahead of origin, docs and tools only (no engine code)",
+      "meaning": "Push master — 14 commits ahead of origin, docs and tools only (no engine code)",
       "since": "2026-10-04"
     },
     {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "DSR-1..DSR-8",
-      "meaning": "Doc state register proposal: 8 decisions, now REVIEWED with recommended answers (backfill scope is yours: tripwire-flagged). Build after 2026-11-25",
-      "doc": "docs/doc-state-register-proposal-review-2026-10-05.md",
-      "anchor": "§3 recommended answers",
-      "since": "2026-10-04"
     }
   ],
   "in_progress": [
@@ -106,6 +97,12 @@
       "what": "After 2026-11-25: the rest of the post-holiday order (measurement fixes, daylight-saving session hours, liquidation park build with the per-session liquidation-size rider, ADX/RSI re-anchor)",
       "doc": "docs/seat-handover-2026-10-01.md",
       "anchor": "§3"
+    },
+    {
+      "what": "After 2026-11-25: doc state register P1 — build the register and its gate checks, then the full decision backfill (768 rows, living docs first) in the same build",
+      "doc": "docs/doc-state-register-proposal.md",
+      "anchor": "§0 P1 sessions",
+      "model": "Opus 5.5, medium (build) + seat, high (backfill judgment)"
     }
   ]
 }
