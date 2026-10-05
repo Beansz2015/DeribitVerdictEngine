@@ -178,6 +178,18 @@ New ID prefix `RBA` (raw book absorption), checked free with `git grep -E "\bRBA
 | `RBA-5` | Where the full run executes | (a) the temporary AWS instance `i-0b17cf2c2eb67496e`, 24 h, key from a mode-600 env file · (b) the dev machine, ≤ 6 h, ending before 19:00 UTC · (c) several dev-machine runs on separate days | **(a)**, by trader direction relayed 2026-10-05. ⚠ **`HH-2`'s recorded text still says "dev machine only".** The temporary instance is not the collector box, but the ruling text must be updated before the key goes there. Three-step test: (b) records fewer pairs and only one session; (c) takes several days | ⛔ **Trader / orchestrator: record the `HH-2` scope change before deploy** |
 | `RBA-6` | Run length | (a) 24 h, every session once · (b) stop once the 200-pair minimum is met · (c) 10 h, NY plus early ASIA | **(a).** It records the most and covers all three sessions; it still ends before the Stage 1 read. Cost: the temporary instance lives ~13 h past the backfill's end (t3.small). Three-step test: (a) is the richest | Auto-proceeded; ⚠ the orchestrator must keep the instance up until ~15:00 UTC 2026-10-06 or stop the run early (`ssm-rawbook-stop.json`) |
 
+**Harness 6 (the decision-bias tripwire), run 2026-10-05 13:17 UTC on `RBA-2`–`RBA-6` at rev `f330c70`.** Seat labels written first (all five `no_richer_option`). Files: `docs/harness-runs/decision-bias-20261005T1317Z-rawbook-{population,baseline,jev}.json`.
+
+| ID | Jev modal verdict | Agreement over 5 samples | Seat label |
+|---|---|---|---|
+| `RBA-2` | `no_richer_option` | 1.0 | same |
+| `RBA-3` | `no_richer_option` | 1.0 | same |
+| `RBA-4` | `richer_option_wrong` | 1.0 | `no_richer_option` |
+| `RBA-5` | `richer_option_wrong` | 1.0 | `no_richer_option` |
+| `RBA-6` | `no_richer_option` | 0.8 (unstable) | same |
+
+**No `gives_up_for_economy` flag**, so nothing is sent to the trader on bias grounds. The two disagreements (`RBA-4`, `RBA-5`) are between the two "no trade" labels and do not change the action. `RBA-5` still goes to the trader on its own: the `HH-2` scope.
+
 ---
 
 ## 7. Session 1 record — build and smoke run

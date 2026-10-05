@@ -1,0 +1,154 @@
+{
+ "rev": "f330c7024ed74edc9e738fde299abdd446e556f4",
+ "rev7": "f330c70",
+ "stamp_utc": "20261005T1317Z",
+ "builder": "raw-book implementer seat, by hand",
+ "note": "STATE ONLY. Live reads.",
+ "items": [
+  {
+   "id": "docs/raw-book-absorption-test-spec.md|RBA-2-orch@f330c70",
+   "question": "Which trades feed should the raw-book arm of a feed-granularity test use, when the question is whether the 100 ms book feed mis-measures a pull/post accounting?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "raw trades for the raw arm, plus a diagnostic arm on raw book with 100 ms trades",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "100 ms trades only for the raw arm",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "raw trades only, no diagnostic arm",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Records the most and separates book granularity from trade-timing misalignment, which pushes the accounting the same way as the hypothesis.",
+   "question_src": "docs/raw-book-absorption-test-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-test-spec.md"
+   ],
+   "state_rev": "f330c7024ed74edc9e738fde299abdd446e556f4",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-test-spec.md|RBA-3-orch@f330c70",
+   "question": "Episode pairing rule for the primary read when the raw arm may fragment episodes the 100 ms arm sees whole",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "aligned pairs only (same side, level, generation; open and close within 500 ms)",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "aligned pairs primary, plus a concatenation secondary and a same-instant secondary, all reported",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "concatenation primary",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "Aligned pairs are the only pairs with equal spans; the two secondaries show what fragmentation does to the answer.",
+   "question_src": "docs/raw-book-absorption-test-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-test-spec.md"
+   ],
+   "state_rev": "f330c7024ed74edc9e738fde299abdd446e556f4",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-test-spec.md|RBA-4-orch@f330c70",
+   "question": "Thresholds of a pre-registered read rule comparing per-episode pullFrac between two feeds",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "p < 0.01; material = flips >= 5 % of pairs or median |delta| >= 0.05; balance band +-0.10; minimum 200 pairs",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "looser: p < 0.05, minimum 100 pairs",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "no pre-registered thresholds; judge after the data",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Pre-registered before any run data was read; 200 pairs give a sign test that detects a 60/40 split at p about 0.005.",
+   "question_src": "docs/raw-book-absorption-test-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-test-spec.md"
+   ],
+   "state_rev": "f330c7024ed74edc9e738fde299abdd446e556f4",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-test-spec.md|RBA-5-orch@f330c70",
+   "question": "Where should a long authenticated read-only market-data probe run, when the dev machine shuts down nightly and the key ruling says dev machine only?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "a temporary cloud instance for 24 h, key in a mode-600 env file, after the key ruling's text is updated",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "the dev machine, 6 h or less, ending before the nightly shutdown",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "several dev-machine runs on separate days",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Trader direction relayed 2026-10-05. Records the most pairs and covers every session; the ruling text must be updated before the key moves.",
+   "question_src": "docs/raw-book-absorption-test-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-test-spec.md"
+   ],
+   "state_rev": "f330c7024ed74edc9e738fde299abdd446e556f4",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-test-spec.md|RBA-6-orch@f330c70",
+   "question": "Run length for a feed-comparison probe whose minimum count is reachable in a few hours",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "24 h, every trading session once",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "stop once the 200-pair minimum is met",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "10 h, NY plus early ASIA",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Records the most and covers all three sessions; still ends before the dependent read. Cost: the temporary instance lives about 13 h longer.",
+   "question_src": "docs/raw-book-absorption-test-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-test-spec.md"
+   ],
+   "state_rev": "f330c7024ed74edc9e738fde299abdd446e556f4",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

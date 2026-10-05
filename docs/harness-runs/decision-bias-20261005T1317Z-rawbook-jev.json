@@ -1,0 +1,139 @@
+{
+    "rev":  "f330c7024ed74edc9e738fde299abdd446e556f4",
+    "population":  "docs/harness-runs/decision-bias-20261005T1317Z-rawbook-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20261005T1317Z-rawbook-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "jev_model":  "requested=[jev-latest x25] resolved=[jev-1.13.0 x25] run_utc=2026-10-05T13:17:49Z",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  25,
+    "usage_input_tokens":  18499,
+    "wall_time_sec":  8.28,
+    "items":  [
+                  {
+                      "id":  "docs/raw-book-absorption-test-spec.md|RBA-2-orch@f330c70",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.626,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.57,
+                                                       0.67,
+                                                       0.65,
+                                                       0.66,
+                                                       0.58
+                                                   ],
+                      "usage_input_tokens":  3713,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-test-spec.md|RBA-3-orch@f330c70",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.576,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.63,
+                                                       0.53,
+                                                       0.6,
+                                                       0.57,
+                                                       0.55
+                                                   ],
+                      "usage_input_tokens":  3627,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-test-spec.md|RBA-4-orch@f330c70",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.546,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.56,
+                                                       0.53,
+                                                       0.56,
+                                                       0.53,
+                                                       0.55
+                                                   ],
+                      "usage_input_tokens":  3843,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-test-spec.md|RBA-5-orch@f330c70",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.63,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.67,
+                                                       0.62,
+                                                       0.63,
+                                                       0.58,
+                                                       0.65
+                                                   ],
+                      "usage_input_tokens":  3756,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-test-spec.md|RBA-6-orch@f330c70",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  0.8,
+                      "stable":  false,
+                      "mean_top_probability":  0.418,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "gives_up_for_economy",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.4,
+                                                       0.37,
+                                                       0.53,
+                                                       0.35,
+                                                       0.44
+                                                   ],
+                      "usage_input_tokens":  3560,
+                      "seat_label":  "no_richer_option"
+                  }
+              ]
+}
