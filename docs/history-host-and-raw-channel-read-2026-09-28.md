@@ -67,6 +67,8 @@
 
 ✅ **RULED 2026-09-28 (trader): `HH-1` = (a), `HH-2` = (a), `HH-3` = (a) (hold B2).**
 
+✅ **`HH-2` SCOPE WIDENED AGAIN 2026-10-05 (trader):** if the raw order-book absorption test needs more than 6 h, it runs on the TEMPORARY AWS instance (`i-0b17cf2c2eb67496e`, or a successor temp instance) instead of the dev machine, which is shut down daily by 03:00–04:00 GMT+8. The key goes on the box only as an env file (mode 600), never on a command line or in a committed file, and leaves with the instance at termination. The collector box is still excluded.
+
 ✅ **`HH-2` SCOPE WIDENED 2026-09-29 (trader):** the read-only key (env vars `DERIBIT_RO_CLIENT_ID` / `DERIBIT_RO_CLIENT_SECRET`) may also be used for the **raw order-book absorption test** (`book.BTC-PERPETUAL.none.10.raw` against the 100 ms fold; the surviving test in `trader-tick-queue.md` §2's "REFUTED ON DIRECTION" row). Every other `HH-2` condition stands: **dev machine only**, env vars only, never on the collector box, never in the repo or a log.
 
 ## 5. Next steps, holiday-aware (trader away 2026-10-14 → 2026-11-25)
