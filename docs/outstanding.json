@@ -1,17 +1,12 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-05T12:42Z",
+  "updated_utc": "2026-10-05T13:20Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
-    {
-      "kind": "push",
-      "meaning": "Push master — 14 commits ahead of origin, docs and tools only (no engine code)",
-      "since": "2026-10-04"
-    },
     {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
@@ -32,6 +27,12 @@
       "where": "AWS i-0b17cf2c2eb67496e (temporary)",
       "started_utc": "2026-10-05T12:29Z",
       "check": "ssm-history-status.json via aws ssm send-command (runbook step c)"
+    },
+    {
+      "what": "Raw order-book absorption test (does the 100 ms book feed inflate the pull veto's input?): spec, probe build, then a detached run on this machine",
+      "where": "agent (orchestrator-dispatched), then a local process",
+      "started_utc": "2026-10-05T13:15Z",
+      "check": "the orchestrator relays the agent's report and the run's liveness command"
     }
   ],
   "dated": [
@@ -81,12 +82,6 @@
       "doc": "docs/indicator-calibration-review-2026-10-02.md",
       "anchor": "§6–§9",
       "model": "Opus 5.5 or Fable 5.1, high"
-    },
-    {
-      "what": "Raw order-book absorption test — only if the pre-holiday list is done with time to spare, else after 2026-11-25",
-      "doc": "docs/seat-handover-2026-10-01.md",
-      "anchor": "§0 FIRST ACTIONS item 7",
-      "model": "Opus 5.5, high"
     },
     {
       "what": "After 2026-11-25: first fetch, closing history comparison, then the stage-4 pass rule (run dates, 14 days)",
