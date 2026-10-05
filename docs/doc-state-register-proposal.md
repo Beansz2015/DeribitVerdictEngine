@@ -159,13 +159,56 @@ Seat handovers keep their hand-written §0 FIRST ACTIONS, because that is judgme
 
 ## 6. Backfill (decision `DSR-4`)
 
-| Option | Records | Cost |
-|---|---|---|
-| (a) **Ratchet:** seed the register with every decision **open today**; add every new and newly-ruled decision from P1 on; backfill a ruled row when its doc is next touched | Open state complete from day one; history fills in over time | One seat session (the 68 candidates, read in their D-tables) |
-| (b) **Full backfill** of every decision row in the 210 docs | Complete history | Several sessions. A script proposes rows; a seat must separate decisions from findings and read each ruling |
-| (c) **Living-docs backfill:** (a) plus every ruled decision in docs linked from `docs/trader-tick-queue.md`, `docs/roadmap.md` or a handover of the last 30 days | Everything a seat is likely to cite | Between (a) and (b) |
+⚠ **Revised 2026-10-05 (UTC) with measured costs.** The first version said the full backfill costs "several sessions" and recommended (a). That cost was a guess, and it overstated the reading part. The measurements are below; the superseded text is quoted at the end of this section.
 
-⚠ **This is the class `CLAUDE.md` reserves.** (b) records more. My read is (a), and my reason is partly cost, so the trader decides. My argument for (a) beyond cost: no check or view *consumes* old ruled rows. C2 and C3 only bite on rows the register holds, and the ratchet adds a row the moment its doc is touched, which is exactly when a stale copy could be written. Against (a): until a doc is touched, a seat that greps an old ID gets no register answer.
+### 6.1 Measured cost (working tree at `d83d8ac`)
+
+"Decision row" here means a table row keyed by an ID, under a header that names a decision, question, option or ruling. **Token counts are the `Read` tool's own counts**, not a bytes-to-tokens conversion (`CLAUDE.md` forbids scaling one from the other).
+
+| Set | Docs | Decision rows | Tokens, decision rows only | Tokens, whole docs |
+|---|---|---|---|---|
+| **Full** (top-level docs) | 119 | 768 | **91,812** (measured) | ~0.95–1.0 M (estimate) |
+| **Living docs** (§6.3) | 56 | 366 | **49,140** (measured) | ~0.5 M (estimate) |
+| Unit: `docs/DeribitIndicatorProject.md`, the first session-start read | 1 | — | — | **35,166** (measured) |
+
+- **The whole-doc figures are estimates.** The files are 2.3 MB and 1.2 MB, too large for `Read` to count. The estimate applies the 2.28–2.42 bytes/token measured on the three counted files. Treat them as ±15 %.
+- **Reading is cheap; judgment is the cost.** A script pulls out the rows: 92K tokens, about 2.6× `docs/DeribitIndicatorProject.md`. The seat's work is deciding, for each row:
+  - is it a decision or a finding?
+  - is it ruled or open?
+  - **was it superseded in a later cell or another doc?** For example, absorption decision `D-2` in `docs/absorption-mechanism-revision-proposal.md` was re-ruled across three cells and two docs.
+- Instruments: `docs/audits/proofs/doc-state-census-2026-10-03/` (`backfill_size.py`, `concat_sets.py`, and their outputs).
+
+### 6.2 What no backfill captures
+
+Even (b) records **every decision written into a decision table**, not every decision ever made:
+
+| Gap | Size |
+|---|---|
+| Rulings written in prose, outside tables | 205 lines in top-level docs, 54 in the archive docs (lines carrying RULED, TICKED or AUTO-PROCEEDED) |
+| Archive docs | 145 ID rows, 1 under a decision-style header: their decisions are mostly prose |
+| The earliest decisions | Docs start 2026-03-13. Earlier choices live in `settings.json` `change_log`, `docs/DeribitIndicatorProject.md` §15 and git history |
+| Decisions made in conversation and never written down | Not recoverable |
+| Older table formats ("Resolved", "✅ Yes"; 248 header shapes) | Found by script, judged by a seat |
+
+The register links each decision to its doc. **The reasoning stays in the doc and is reached by the link; it is not copied.**
+
+### 6.3 Options
+
+**Living docs** = the current state docs plus every doc they link to directly. The state docs are `docs/trader-tick-queue.md`, `docs/roadmap.md` and the seat handovers of the last 30 days (17 on 2026-10-05). In practice: the docs a seat is likely to cite this month.
+
+| Option | Records | Seat sessions (Opus 5.5, high) — estimate |
+|---|---|---|
+| (a) **Ratchet:** seed with every decision **open today**; add every new and newly-ruled decision from P1 on; backfill a ruled row when its doc is next touched | Open state complete from day one; history fills in over time | under 1 |
+| (b) **Full backfill:** every decision row in the 119 docs (768 rows) | Every decision recorded in a decision table | 2–3 |
+| (c) **Living docs:** (a) plus every decision row in the 56 living docs (366 rows, 48 % of full) | Everything currently in play | 1–2 |
+
+The session counts are not measured: they depend on how often a row needs a cross-doc check.
+
+### 6.4 Read
+
+⚠ **This is the class `CLAUDE.md` reserves:** (b) records more than (a) or (c). **My revised read is (b), or (c) as a first pass with (b) directly after.** Under the three-step test, (b)'s extra cost over (c) is now known and small, about one session, and my economy argument for (a) no longer holds. The trader decides.
+
+> *Superseded text, kept per the quote-and-label convention:* ~~"(b) Full backfill … Several sessions." · "My read is (a), and my reason is partly cost, so the trader decides. My argument for (a) beyond cost: no check or view consumes old ruled rows. C2 and C3 only bite on rows the register holds, and the ratchet adds a row the moment its doc is touched, which is exactly when a stale copy could be written. Against (a): until a doc is touched, a seat that greps an old ID gets no register answer."~~
 
 ## 7. Phases and timing
 
@@ -187,7 +230,7 @@ Seat handovers keep their hand-written §0 FIRST ACTIONS, because that is judgme
 | `DSR-1` | Register format | (a) JSONL in git · (b) YAML in git · (c) SQLite · (d) GitHub Issues | **(a).** It diffs per line, merges cleanly and parses natively in PS 5.1. (b) needs a YAML module for the gate. (c) cannot be diffed. (d) leaves the repo |
 | `DSR-2` | Key scheme | (a) `<doc-stem>#<local-id>` · (b) renumber every decision to a global ID · (c) bare IDs | **(a).** (c) is mechanically wrong: 291 IDs collide (§2). (b) rewrites 210 docs and breaks every existing citation. (a) changes no doc |
 | `DSR-3` | Where the ruling text lives | (a) doc row and register, kept consistent by C2 · (b) register only; doc rows point to it · (c) doc only; register holds status | **(a).** It is the more self-describing option: the spec still says what was ruled if the register is lost. C2 removes the drift risk of the duplicate |
-| `DSR-4` | Backfill scope | (a) ratchet · (b) full · (c) living docs (§6) | **(a), reserved to you.** Cheaper and records less; argument in §6 |
+| `DSR-4` | Backfill scope | (a) ratchet · (b) full · (c) living docs (§6) | **Revised 2026-10-05: (b), or (c) then (b). Reserved to you.** Measured cost in §6.1: (b) reads 92K tokens of rows and needs about one session more than (c). ~~(a), reserved to you. Cheaper and records less~~; argument in §6 |
 | `DSR-5` | C3 severity | (a) FAIL on prepush, added lines only · (b) WARN only · (c) FAIL on the whole tree | **(a).** (b) is the alarm that gets ignored. (c) fails on day one across 555 files |
 | `DSR-6` | The queue's role | (a) order and gates only; state moves out; banner archived (§5) · (b) leave it; add the generated view beside it | **(a).** (b) keeps two state homes, which is the cause of the problem |
 | `DSR-7` | Timing | (a) P1 after 2026-11-25 · (b) P1 before 2026-10-13 | **(a).** The pre-holiday list is full, and a half-built gate check over the holiday helps no one. Meanwhile seats keep `docs/outstanding.json` current, which already works |

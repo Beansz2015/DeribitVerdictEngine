@@ -1,0 +1,5 @@
+top-level: docs-with-rows=213 rows=2054 decision-header-rows=768 bytes(docs)=4,601,526 bytes(decision rows only)=215,248 RULED-lines-outside-tables=205
+archive+subdirs: docs-with-rows=17 rows=145 decision-header-rows=1 bytes(docs)=688,613 bytes(decision rows only)=574 RULED-lines-outside-tables=54
+living seeds=19 living docs=143
+living: docs-with-rows=95 rows=1129 decision-header-rows=366 bytes(docs)=2,216,396 bytes(decision rows only)=114,640 RULED-lines-outside-tables=112
+first docs commit: 2026-03-13
