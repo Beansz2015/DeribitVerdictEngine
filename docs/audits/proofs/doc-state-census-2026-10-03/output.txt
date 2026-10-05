@@ -1,0 +1,27 @@
+decision-like rows: 2022
+docs with such rows: 211
+distinct IDs: 839
+IDs keyed in >1 doc: 291  (1386 doc-IDs)
+  D-2      in 27 docs: a54a-drift-guard-escalation-2026-09-04.md, a54a-json-poco-drift-guard-spec.md, absorption-d2-s1-batch-summary.md, absorption-d2-s1-spec-back.md, absor
+  D1       in 25 docs: adversarial-audit-2026-09-24.md, audit-fixes-2026-07-02-proposal.md, backlog-dependency-map.md, backtest-synthesizer-proposal.md, book-absorption-prop
+  D-1      in 24 docs: a54a-json-poco-drift-guard-spec.md, absorption-mechanism-revision-proposal.md, autotweaker-weekday-filter-proposal.md, c3b-venue-scoping-spec.md, coll
+  D3       in 24 docs: adversarial-audit-2026-09-24.md, audit-fixes-2026-07-02-proposal.md, backtest-synthesizer-proposal.md, book-absorption-proposal.md, cli-port-run-state
+  D4       in 24 docs: adversarial-audit-2026-09-24.md, audit-fixes-2026-07-02-proposal.md, backtest-synthesizer-proposal.md, book-absorption-proposal.md, cli-port-run-state
+  D-3      in 23 docs: a54a-drift-guard-escalation-2026-09-04.md, a54a-json-poco-drift-guard-spec.md, absorption-mechanism-revision-proposal.md, autotweaker-weekday-filter-p
+  D2       in 23 docs: adversarial-audit-2026-09-24.md, audit-fixes-2026-07-02-proposal.md, backtest-synthesizer-proposal.md, book-absorption-proposal.md, cli-port-run-state
+  D-4      in 21 docs: a54a-json-poco-drift-guard-spec.md, absorption-mechanism-revision-proposal.md, autotweaker-weekday-filter-proposal.md, c3b-venue-scoping-spec.md, coll
+  D5       in 21 docs: adversarial-audit-2026-09-24.md, backtest-synthesizer-proposal.md, book-absorption-proposal.md, cli-port-run-state-extraction-proposal.md, cross-venue
+  Q1       in 21 docs: analysis-log-csv-expansion-proposal.md, api-resilience-pass-proposal.md, asia-burst-rederivation-read-brief-2026-09-14.md, bid-ask-spread-proposal.md,
+  D-5      in 20 docs: a54a-json-poco-drift-guard-spec.md, absorption-mechanism-revision-proposal.md, autotweaker-weekday-filter-proposal.md, c3b-venue-scoping-spec.md, coll
+  Q2       in 20 docs: analysis-log-csv-expansion-proposal.md, api-resilience-pass-proposal.md, asia-burst-rederivation-read-brief-2026-09-14.md, bid-ask-spread-proposal.md,
+rows with a ruling marker: 268
+rows with an open marker and no ruling marker: 68
+distinct table header shapes: 249; top 8:
+   150  | # | decision | recommendation |
+    93  | # | question | default answer | status |
+    73  | # | sev | defect | found by | evidence |
+    55  | # | criterion |
+    51  | id | source and kind | meaning |
+    43  | id | branch | arms | coverage |
+    39  | # | decision | options | my read |
+    29  | # | check | expected |
