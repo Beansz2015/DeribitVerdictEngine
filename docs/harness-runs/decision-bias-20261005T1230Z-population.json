@@ -1,0 +1,236 @@
+{
+ "rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+ "rev7": "4d5c6ae",
+ "stamp_utc": "20261005T1230Z",
+ "builder": "orchestrator seat, by hand",
+ "note": "STATE ONLY. Live review reads.",
+ "items": [
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-1-review@4d5c6ae",
+   "question": "Format of a git-tracked register of decisions (open/ruled status per decision)",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "JSONL in git",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "YAML in git",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(c)",
+     "text": "SQLite",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(d)",
+     "text": "GitHub Issues",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Per-line diffs and clean merges; parses natively in PowerShell 5.1. SQLite cannot be diffed; Issues leave the repo; YAML needs a module in the gate.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-2-review@4d5c6ae",
+   "question": "Key scheme for decisions when 291 bare IDs (e.g. D-2 in 27 docs) collide across docs",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "<doc-stem>#<local-id>",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "renumber every decision to a global ID, rewriting 210 docs",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(c)",
+     "text": "bare IDs",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(c) merges unrelated decisions. (b) rewrites 210 docs and breaks every existing citation in commits and memories. (a) changes no doc.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-3-review@4d5c6ae",
+   "question": "Where the ruling text lives",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "in the doc's decision table and in the register, kept consistent by a gate check",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "register only; doc rows point to it",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(c)",
+     "text": "doc only; register holds status",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The doc stays self-describing if the register is lost; the gate check turns drift into a push failure.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-4-review@4d5c6ae",
+   "question": "Backfill scope for the decision register",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "ratchet: seed only decisions open today; add a ruled row when its own doc is next touched",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "full backfill of every decision row in 210 docs",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(c)",
+     "text": "living docs: (a) plus every ruled decision in docs linked from the queue, roadmap or handovers of the last 30 days",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "The recorded stale claims were written in OTHER docs (the queue) about decisions ruled elsewhere, so (a)'s touch-the-doc ratchet never adds those rows and the stale-claim check cannot fire. (c) covers what seats actually cite. (b) records more but costs several sessions.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-5-review@4d5c6ae",
+   "question": "Severity of a gate check that flags an added line calling a ruled decision 'owed/queued'",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "FAIL on push, added lines only",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "WARN only",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(c)",
+     "text": "FAIL on the whole tree",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a), but only after measuring false positives on 30 days of commits and exempting correction lines that also carry a ruling marker. (c) fails on day one across 555 legacy files; (b) is an alarm that gets ignored.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-6-review@4d5c6ae",
+   "question": "Role of the trader tick queue doc once a register and a generated state view exist",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "order and gates only; state moves out; old banner blocks archived",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "leave it; add the generated view beside it",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(b) keeps two homes for the same state, which is the cause of the staleness.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-7-review@4d5c6ae",
+   "question": "Timing of the register build with a 6-week holiday starting 2026-10-14 and a build freeze during it",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "build P1 after 2026-11-25",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "build P1 before 2026-10-13",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The holiday rule bars builds; a half-built gate over 6 unattended weeks helps no one; the pre-holiday list is full.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-8-review@4d5c6ae",
+   "question": "Two parked AI-judgment sweeps (shipped-state sweep, cross-doc contradiction sweep) that overlap a new deterministic gate",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "keep parked; build the deterministic layer first; re-scope after it",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "merge them into this proposal",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(c)",
+     "text": "drop them",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The register gives the ground truth both sweeps lack; after it lands, what remains for them is pure prose judgment.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

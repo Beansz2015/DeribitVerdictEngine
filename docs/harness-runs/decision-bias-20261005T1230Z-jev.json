@@ -1,0 +1,208 @@
+{
+    "rev":  "4d5c6ae0ed0a0f1dbaceee4980e898bbad9c3f23",
+    "population":  "docs/harness-runs/decision-bias-20261005T1230Z-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20261005T1230Z-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "jev_model":  "requested=[jev-latest x40] resolved=[jev-1.13.0 x40] run_utc=2026-10-05T11:52:45Z",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  40,
+    "usage_input_tokens":  28562,
+    "wall_time_sec":  11.34,
+    "items":  [
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-1-review@4d5c6ae",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.408,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.37,
+                                                       0.45,
+                                                       0.44,
+                                                       0.38,
+                                                       0.4
+                                                   ],
+                      "usage_input_tokens":  3627,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-2-review@4d5c6ae",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.472,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.48,
+                                                       0.5,
+                                                       0.49,
+                                                       0.48,
+                                                       0.41
+                                                   ],
+                      "usage_input_tokens":  3604,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-3-review@4d5c6ae",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.776,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.77,
+                                                       0.79,
+                                                       0.81,
+                                                       0.78,
+                                                       0.73
+                                                   ],
+                      "usage_input_tokens":  3469,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-4-review@4d5c6ae",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.856,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.83,
+                                                       0.88,
+                                                       0.85,
+                                                       0.88,
+                                                       0.84
+                                                   ],
+                      "usage_input_tokens":  3824,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-5-review@4d5c6ae",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.702,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.72,
+                                                       0.68,
+                                                       0.7,
+                                                       0.73,
+                                                       0.68
+                                                   ],
+                      "usage_input_tokens":  3607,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-6-review@4d5c6ae",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.902,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.9,
+                                                       0.9,
+                                                       0.9,
+                                                       0.9,
+                                                       0.91
+                                                   ],
+                      "usage_input_tokens":  3374,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-7-review@4d5c6ae",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.87,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.87,
+                                                       0.85,
+                                                       0.86,
+                                                       0.88
+                                                   ],
+                      "usage_input_tokens":  3528,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-8-review@4d5c6ae",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.472,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.48,
+                                                       0.46,
+                                                       0.5,
+                                                       0.46,
+                                                       0.46
+                                                   ],
+                      "usage_input_tokens":  3529,
+                      "seat_label":  "no_richer_option"
+                  }
+              ]
+}

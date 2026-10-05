@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-05T12:05Z",
+  "updated_utc": "2026-10-05T12:40Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — added the doc state register decisions (other rows from the orchestrator seat, 20:00Z)",
   "away": {
     "from": "2026-10-14",
@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 3 commits ahead of origin, docs and tools only (no engine code)",
+      "meaning": "Push master — 4 commits ahead of origin, docs and tools only (no engine code)",
       "since": "2026-10-04"
     },
     {
@@ -21,9 +21,9 @@
       "kind": "ruling",
       "tick": true,
       "id": "DSR-1..DSR-8",
-      "meaning": "Doc state register proposal: 8 decisions (register format, ID keys, backfill scope — reserved to you, timing). Not urgent: build after 2026-11-25",
-      "doc": "docs/doc-state-register-proposal.md",
-      "anchor": "§8",
+      "meaning": "Doc state register proposal: 8 decisions, now REVIEWED with recommended answers (backfill scope is yours: tripwire-flagged). Build after 2026-11-25",
+      "doc": "docs/doc-state-register-proposal-review-2026-10-05.md",
+      "anchor": "§3 recommended answers",
       "since": "2026-10-04"
     }
   ],

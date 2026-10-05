@@ -1,0 +1,14 @@
+{
+ "rev": "4d5c6ae",
+ "written_by": "orchestrator seat, claude-opus-5-5, BEFORE the Jev run, 2026-10-05 UTC",
+ "labels": {
+  "docs/doc-state-register-proposal.md|DSR-1-review@4d5c6ae": "no_richer_option",
+  "docs/doc-state-register-proposal.md|DSR-2-review@4d5c6ae": "richer_option_wrong",
+  "docs/doc-state-register-proposal.md|DSR-3-review@4d5c6ae": "no_richer_option",
+  "docs/doc-state-register-proposal.md|DSR-4-review@4d5c6ae": "gives_up_for_economy",
+  "docs/doc-state-register-proposal.md|DSR-5-review@4d5c6ae": "richer_option_wrong",
+  "docs/doc-state-register-proposal.md|DSR-6-review@4d5c6ae": "no_richer_option",
+  "docs/doc-state-register-proposal.md|DSR-7-review@4d5c6ae": "no_richer_option",
+  "docs/doc-state-register-proposal.md|DSR-8-review@4d5c6ae": "no_richer_option"
+ }
+}
