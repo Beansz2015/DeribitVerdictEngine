@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-05T13:40Z",
+  "updated_utc": "2026-10-05T12:35Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — added the doc state register decisions (other rows from the orchestrator seat, 20:00Z)",
   "away": {
     "from": "2026-10-14",
@@ -9,35 +9,8 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 9 commits ahead of origin, docs and tools only (no engine code)",
+      "meaning": "Push master — 10 commits ahead of origin, docs and tools only (no engine code)",
       "since": "2026-10-04"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "TFS-12",
-      "meaning": "Trade-flow study is unreadable (87 of 100 needed, closed span). Backfill 2023–2024 history, re-register, then run? (orchestrator and agent agree)",
-      "doc": "docs/liq-tradeflow-flip-study-spec.md",
-      "anchor": "§9 decision table, row TFS-12",
-      "since": "2026-10-05"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "TFS-8",
-      "meaning": "Outcome measure: engine replay of placed levels (orchestrator) or tape-built ATR levels (agent, flagged as a cost pick)",
-      "doc": "docs/liq-tradeflow-flip-study-spec.md",
-      "anchor": "§9 decision table, row TFS-8",
-      "since": "2026-10-05"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "TFS-6",
-      "meaning": "Reference-grid step 15 min / 5 min / random instants — low stakes; every read tripwire-flagged",
-      "doc": "docs/liq-tradeflow-flip-study-spec.md",
-      "anchor": "§9 decision table, row TFS-6",
-      "since": "2026-10-05"
     },
     {
       "kind": "go",
@@ -62,6 +35,12 @@
       "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
       "doc": "docs/aws-collector-deploy-checklist.md",
       "anchor": "§5 deploy ledger"
+    },
+    {
+      "what": "History backfill 2023-01-01 → 2024-12-31 for the trade-flow study (separate store; terminate the instance only after the pull passes) — ETA about 2026-10-06 02:30 UTC",
+      "where": "AWS i-0b17cf2c2eb67496e (temporary)",
+      "started_utc": "2026-10-05T12:29Z",
+      "check": "ssm-history-status.json via aws ssm send-command (runbook step c)"
     }
   ],
   "dated": [

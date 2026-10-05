@@ -1,0 +1,5 @@
+{"commands":[
+"set -e",
+"test -x /opt/history/runner/BacktestRunner || { echo 'run ssm-history-selftest.json first'; exit 1; }",
+"FROM=2023-01-01 TO=2025-01-01 PREFIX=history-backfill/store-2023-2024 bash /opt/history/history-backfill-cloud.sh start"
+]}

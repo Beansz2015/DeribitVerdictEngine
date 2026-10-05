@@ -399,6 +399,11 @@ A STOP is reported before any outcome is read. **A STOP is not an invitation to 
 
 ## 9. Decisions
 
+> ✅ **RULED 2026-10-05 (trader), on the orchestrator's reads:**
+> - **`TFS-12` = (c), scoped to 2023-01-01 → 2024-12-31.** Not back to 2020: 2020–2022 is a different market regime (retail-leverage cycle, pre-FTX-collapse venue mix, lower price levels that change what a USD "large" liquidation means). History-host flags were verified present in 2023 and 2024 samples. The backfill goes to a SEPARATE store (`C:\DeribitData\history-2023-2024`, S3 prefix `history-backfill/store-2023-2024`). Then: re-derive the `LLS-1` per-session thresholds per period, re-register this spec on the extended span, and only then session 2.
+> - **`TFS-8` = (d):** engine replay of the placed levels (the replay loader reads history-store files, fixture `A94f`); session 2 checks the full replay can run and falls back to (c), saying so, if it cannot.
+> - **`TFS-6` = (b):** 5-min reference grid.
+
 Each row went through harness 6, the decision-bias tripwire (`tools/checks/measure/decision-bias/run-decision-bias.ps1`, 5 samples, 60 calls). My labels were written first (shadow-mode rule). Files: `docs/harness-runs/decision-bias-20261005T1150Z-{population,baseline,jev}.json`. **Jev flagged `TFS-6` and `TFS-8` as `gives_up_for_economy` (5/5, p 1.00 and 0.98). My own labels flag the same two.** One item unstable: `TFS-7` (4/5).
 
 | ID | Question | Options | My read | My label · Jev (agreement, mean p) | Status |
