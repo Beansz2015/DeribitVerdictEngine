@@ -1,0 +1,106 @@
+{
+ "rev": "1da3c6df916ffcf3adce99a9dddeeccd9c7f937b",
+ "rev7": "1da3c6d",
+ "stamp_utc": "20261005T1330Z",
+ "builder": "orchestrator seat, by hand",
+ "note": "STATE ONLY. Live reads.",
+ "items": [
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-12-orch@1da3c6d",
+   "question": "A pre-registered study has 87 events in its key arm against a floor of 100, on a closed span (2025-01 to 2026-07). Session 2?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "run now; every label NOT READABLE",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "re-register a signal-side variant as primary (113 events) before any outcome",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "backfill earlier years from the history host (2023-2024 first; flags verified in samples), re-register, then run",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "close the study",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "Keeps the measure and adds data. (a) unseals the span so no later design is outcome-blind; (b) chooses the primary after seeing counts; (d) discards a nearly readable study. Flags verified present in 2023 and 2024 samples; 2020-2022 coverage checked per year before extending.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "1da3c6df916ffcf3adce99a9dddeeccd9c7f937b",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-6-orch@1da3c6d",
+   "question": "Reference-grid step for the control population in a study whose power is bound by the 87-event arm",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "15 min",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "5 min",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "random instants",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "(b) records three times the reference windows; its only cost is script runtime in session 2.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "1da3c6df916ffcf3adce99a9dddeeccd9c7f937b",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-8-orch@1da3c6d",
+   "question": "Outcome measure for liquidation-fade trades",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "ATR-fallback levels from the tape",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "fixed-horizon mark",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "(a) decides, (b) descriptive",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "engine replay for structural-first placed levels, then (c)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(d)",
+   "rationale": "(d) is what the engine would actually place. The replay loader already reads 11-column history-store files (fixture A94f). Session 2 checks the full replay can run; if not, fall back to (c) and say so.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "1da3c6df916ffcf3adce99a9dddeeccd9c7f937b",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

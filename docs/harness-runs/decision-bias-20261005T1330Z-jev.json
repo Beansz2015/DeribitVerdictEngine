@@ -1,0 +1,93 @@
+{
+    "rev":  "1da3c6df916ffcf3adce99a9dddeeccd9c7f937b",
+    "population":  "docs/harness-runs/decision-bias-20261005T1330Z-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20261005T1330Z-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "jev_model":  "requested=[jev-latest x15] resolved=[jev-1.13.0 x15] run_utc=2026-10-05T11:58:43Z",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  15,
+    "usage_input_tokens":  11360,
+    "wall_time_sec":  4.23,
+    "items":  [
+                  {
+                      "id":  "docs/liq-tradeflow-flip-study-spec.md|TFS-12-orch@1da3c6d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.908,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.9,
+                                                       0.9,
+                                                       0.91,
+                                                       0.92,
+                                                       0.91
+                                                   ],
+                      "usage_input_tokens":  4206,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/liq-tradeflow-flip-study-spec.md|TFS-6-orch@1da3c6d",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.6,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.64,
+                                                       0.6,
+                                                       0.58,
+                                                       0.55,
+                                                       0.63
+                                                   ],
+                      "usage_input_tokens":  3426,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/liq-tradeflow-flip-study-spec.md|TFS-8-orch@1da3c6d",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.714,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.73,
+                                                       0.71,
+                                                       0.72,
+                                                       0.68,
+                                                       0.73
+                                                   ],
+                      "usage_input_tokens":  3728,
+                      "seat_label":  "no_richer_option"
+                  }
+              ]
+}

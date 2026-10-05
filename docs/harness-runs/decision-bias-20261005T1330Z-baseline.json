@@ -1,0 +1,9 @@
+{
+ "rev": "1da3c6d",
+ "written_by": "orchestrator seat, claude-opus-5-5, BEFORE the Jev run, 2026-10-05 UTC",
+ "labels": {
+  "docs/liq-tradeflow-flip-study-spec.md|TFS-12-orch@1da3c6d": "no_richer_option",
+  "docs/liq-tradeflow-flip-study-spec.md|TFS-6-orch@1da3c6d": "no_richer_option",
+  "docs/liq-tradeflow-flip-study-spec.md|TFS-8-orch@1da3c6d": "no_richer_option"
+ }
+}

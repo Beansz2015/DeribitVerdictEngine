@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-05T12:40Z",
+  "updated_utc": "2026-10-05T13:40Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — added the doc state register decisions (other rows from the orchestrator seat, 20:00Z)",
   "away": {
     "from": "2026-10-14",
@@ -9,8 +9,35 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 7 commits ahead of origin, docs and tools only (no engine code)",
+      "meaning": "Push master — 9 commits ahead of origin, docs and tools only (no engine code)",
       "since": "2026-10-04"
+    },
+    {
+      "kind": "ruling",
+      "tick": true,
+      "id": "TFS-12",
+      "meaning": "Trade-flow study is unreadable (87 of 100 needed, closed span). Backfill 2023–2024 history, re-register, then run? (orchestrator and agent agree)",
+      "doc": "docs/liq-tradeflow-flip-study-spec.md",
+      "anchor": "§9 decision table, row TFS-12",
+      "since": "2026-10-05"
+    },
+    {
+      "kind": "ruling",
+      "tick": true,
+      "id": "TFS-8",
+      "meaning": "Outcome measure: engine replay of placed levels (orchestrator) or tape-built ATR levels (agent, flagged as a cost pick)",
+      "doc": "docs/liq-tradeflow-flip-study-spec.md",
+      "anchor": "§9 decision table, row TFS-8",
+      "since": "2026-10-05"
+    },
+    {
+      "kind": "ruling",
+      "tick": true,
+      "id": "TFS-6",
+      "meaning": "Reference-grid step 15 min / 5 min / random instants — low stakes; every read tripwire-flagged",
+      "doc": "docs/liq-tradeflow-flip-study-spec.md",
+      "anchor": "§9 decision table, row TFS-6",
+      "since": "2026-10-05"
     },
     {
       "kind": "go",
@@ -35,12 +62,6 @@
       "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
       "doc": "docs/aws-collector-deploy-checklist.md",
       "anchor": "§5 deploy ledger"
-    },
-    {
-      "what": "Trade-flow-flip study after liquidation clusters, session 1: pre-registered spec and outcome-blind power count (2025-01-01 → 2026-07-02)",
-      "where": "agent (orchestrator-dispatched)",
-      "started_utc": "2026-10-05T11:30Z",
-      "check": "the orchestrator relays its report"
     }
   ],
   "dated": [
