@@ -1,0 +1,14 @@
+{"commands":[
+"set -e",
+"aws s3 cp s3://deribit-engine-bucket/rawbook-test/tool/rawbook-tool.tar.gz /tmp/rawbook-tool.tar.gz --region eu-west-2 --only-show-errors",
+"mkdir -p /opt/rawbook && rm -rf /opt/rawbook/probe",
+"tar -xzf /tmp/rawbook-tool.tar.gz -C /opt/rawbook",
+"sed -i 's/\r$//' /opt/rawbook/rawbook-cloud.sh",
+"chmod +x /opt/rawbook/probe/RawBookProbe",
+"export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
+"/opt/rawbook/probe/RawBookProbe --env-file /nonexistent/selftest.env 2>&1 | head -3 || true",
+"grep -m1 '\"version\"' /opt/rawbook/probe/settings.json",
+"ls -l /opt/rawbook/ro.env 2>/dev/null || echo 'ro.env NOT placed yet (needed before start)'",
+"free -m | head -2",
+"df -h / | tail -1"
+]}

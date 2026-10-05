@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Raw order-book absorption test (docs/raw-book-absorption-test-spec.md).
+
+       ONE question: does the 100 ms book feed mis-measure the D8 pull accounting
+       (pullLB / postLB / pullFrac) against the authenticated raw book feed?
+
+       LINKS THE SHIPPED SOURCES (Compile Include, no copies) so every arm runs the engine's
+       own LevelAbsorptionTracker fold and the engine's own level functions. A re-implemented
+       fold would test the copy, not the engine. Nothing under Core/ or UI/ is edited for it.
+
+       Read-only against the venue: one WS connection, the read-only key, no orders.
+       net8.0 + zero WinForms, so it publishes as a self-contained linux-x64 build.
+       Lives under tools/** so the root vbproj's glob never compiles it. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>RawBookProbe</AssemblyName>
+    <StartupObject>DeribitVerdictEngine.RawBookProbeProgram</StartupObject>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The fold under test, and its settings POCO. -->
+    <Compile Include="..\..\Core\LevelAbsorptionTracker.vb" />
+    <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
+    <!-- The level carry: the engine's own swing, VPFR and ATR functions + REST candles. -->
+    <Compile Include="..\..\DeribitClient.vb" />
+    <Compile Include="..\..\Core\ExecutionResolution.vb" />
+    <Compile Include="..\..\Core\IndicatorResults.vb" />
+    <Compile Include="..\..\Core\Indicators_Momentum.vb" />
+    <Compile Include="..\..\Core\Indicators_OrderFlow.vb" />
+    <Compile Include="..\..\Core\Indicators_Structure.vb" />
+    <Compile Include="..\..\Core\Indicators_Volatility.vb" />
+    <Compile Include="..\..\Core\RunErrorLog.vb" />
+    <Compile Include="..\..\Core\VenueStatusLog.vb" />
+    <Compile Include="..\..\Core\ProcessIdentity.vb" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The tracked settings file, read-only. The probe prints its version at start. -->
+    <None Include="..\..\settings.json" Link="settings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

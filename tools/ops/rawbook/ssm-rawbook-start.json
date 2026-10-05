@@ -1,0 +1,6 @@
+{"commands":[
+"set -e",
+"test -x /opt/rawbook/probe/RawBookProbe || { echo 'run ssm-rawbook-install.json first'; exit 1; }",
+"test -f /opt/rawbook/ro.env || { echo 'place /opt/rawbook/ro.env (mode 600) first'; exit 1; }",
+"bash /opt/rawbook/rawbook-cloud.sh start"
+]}
