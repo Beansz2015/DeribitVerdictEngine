@@ -1,0 +1,43 @@
+{
+ "rev": "c0d144a6eddc9e484460f78cafa81cba5117ecec",
+ "rev7": "c0d144a",
+ "stamp_utc": "20261005T1300Z",
+ "builder": "orchestrator seat",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/doc-state-register-proposal.md|DSR-4-rev@c0d144a",
+   "question": "Backfill scope for a git-tracked decisions register. Measured: full = 768 decision rows in 119 docs (92K tokens of rows, 2-3 seat sessions); living docs = 366 rows in 56 docs (1-2 sessions); ratchet = open decisions only (under 1 session).",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "ratchet: open decisions only, add ruled rows when their doc is touched",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(b)",
+     "text": "full backfill of all 768 rows",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(c)",
+     "text": "living docs only (366 rows)",
+     "src": "docs/doc-state-register-proposal.md"
+    },
+    {
+     "label": "(c)->(b)",
+     "text": "living docs first, then the remaining rows in the next session, ending at (b)",
+     "src": "docs/doc-state-register-proposal.md"
+    }
+   ],
+   "recommended": "(c)->(b)",
+   "rationale": "Ends at the full record (b). Doing the living docs first protects the docs seats cite this month soonest; the extra cost of (b) over (c) is about one session.",
+   "question_src": "docs/doc-state-register-proposal.md",
+   "rationale_src": [
+    "docs/doc-state-register-proposal.md"
+   ],
+   "state_rev": "c0d144a6eddc9e484460f78cafa81cba5117ecec",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

@@ -1,0 +1,47 @@
+{
+    "rev":  "c0d144a6eddc9e484460f78cafa81cba5117ecec",
+    "population":  "docs/harness-runs/decision-bias-20261005T1300Z-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20261005T1300Z-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "jev_model":  "requested=[jev-latest x5] resolved=[jev-1.13.0 x5] run_utc=2026-10-05T12:36:03Z",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  5,
+    "usage_input_tokens":  4139,
+    "wall_time_sec":  3.38,
+    "items":  [
+                  {
+                      "id":  "docs/doc-state-register-proposal.md|DSR-4-rev@c0d144a",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.738,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.79,
+                                                       0.7,
+                                                       0.7,
+                                                       0.78,
+                                                       0.72
+                                                   ],
+                      "usage_input_tokens":  4139,
+                      "seat_label":  "no_richer_option"
+                  }
+              ]
+}
