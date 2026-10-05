@@ -8,6 +8,11 @@
   },
   "waiting_on_trader": [
     {
+      "kind": "push",
+      "meaning": "Push master — 7 commits ahead of origin: the raw-book probe tool and spec, rulings record, pane updates (no engine code)",
+      "since": "2026-10-05"
+    },
+    {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
