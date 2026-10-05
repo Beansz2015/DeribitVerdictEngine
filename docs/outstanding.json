@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-05T13:20Z",
+  "updated_utc": "2026-10-05T13:25Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -23,16 +23,16 @@
       "anchor": "§5 deploy ledger"
     },
     {
-      "what": "History backfill 2023-01-01 → 2024-12-31 for the trade-flow study (separate store; terminate the instance only after the pull passes) — ETA about 2026-10-06 02:30 UTC",
+      "what": "History backfill 2023-01-01 → 2024-12-31 for the trade-flow study (separate store) — ETA about 2026-10-06 02:30 UTC. The same instance now also runs the raw-book probe: terminate only after BOTH the backfill pull passes and the probe output is collected",
       "where": "AWS i-0b17cf2c2eb67496e (temporary)",
       "started_utc": "2026-10-05T12:29Z",
       "check": "ssm-history-status.json via aws ssm send-command (runbook step c)"
     },
     {
-      "what": "Raw order-book absorption test (does the 100 ms book feed inflate the pull veto's input?): spec, probe build, then a detached run on this machine",
-      "where": "agent (orchestrator-dispatched), then a local process",
-      "started_utc": "2026-10-05T13:15Z",
-      "check": "the orchestrator relays the agent's report and the run's liveness command"
+      "what": "Raw order-book absorption probe, 24 h run on the temporary AWS instance (ends 2026-10-06 13:20 UTC)",
+      "where": "AWS i-0b17cf2c2eb67496e (temporary)",
+      "started_utc": "2026-10-05T13:20Z",
+      "check": "tools/ops/rawbook/ssm-rawbook-status.json via aws ssm send-command"
     }
   ],
   "dated": [
@@ -74,6 +74,12 @@
       "what": "Burst outcome run 2, NY session (when NY reaches 100 arm-A rows)",
       "doc": "docs/trader-tick-queue.md",
       "anchor": "TRADER AWAY block, 'After 2026-11-25 — first seats back'"
+    },
+    {
+      "due_utc": "2026-10-06T13:30Z",
+      "what": "Collect the raw-book probe output from S3, then the session-2 read against the pre-registered rule; then terminate the temporary instance (after the backfill pull too)",
+      "doc": "docs/raw-book-absorption-test-spec.md",
+      "anchor": "§8 cloud run, steps 5-7"
     }
   ],
   "next_up": [
