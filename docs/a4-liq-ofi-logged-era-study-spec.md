@@ -332,7 +332,16 @@ A STOP is reported to the trader before any outcome is read. **A STOP is not an 
 
 > ✅ **RULED 2026-10-03 (trader), on the orchestrator's reads:**
 > - **`A4L-9` = (b)**, Holm across all three tests (familywise α 0.05). §5's multiplicity row is superseded by this ruling.
-> - **`A4L-10` = (a) + (e).** (a): this study stays SEALED; re-run `H-1` (`tools/ops/a4_liq_ofi_counts.py`) at each history-store refresh; session 2 runs only when FLIP and NO-FLIP each reach n ≥ 100 in covered strata, or after a trader-ruled redesign. (e), a new option: a SEPARATE pre-registered study of trade-flow (aggressor imbalance) flips after liquidation clusters, on the trade store only, restricted to **2025-01-01 → 2026-07-02**, so this study's 28 sealed events stay outcome-blind. It needs its own spec first; that spec is next-up work, not started.
+> - **`A4L-10` = (a) + (e).** (a): this study stays SEALED; re-run `H-1` (`tools/ops/a4_liq_ofi_counts.py`) at each history-store refresh; session 2 runs only when FLIP and NO-FLIP each reach n ≥ 100 in covered strata, or after a trader-ruled redesign. (e), a new option: a SEPARATE pre-registered study of trade-flow (aggressor imbalance) flips after liquidation clusters, on the trade store only, restricted to **2025-01-01 → 2026-07-02**, so this study's 28 sealed events stay outcome-blind. It needs its own spec first (dispatched 2026-10-05).
+>
+> **Re-count log (`A4L-10` (a); a later cut is a new pre-registration of the same design, this spec §8):**
+>
+> | Run (UTC) | Cut (exclusive) | Fetch | Events in logged span | Joined | FLIP / NO-FLIP | Readable |
+> |---|---|---|---|---|---|---|
+> | 2026-10-02 (session 1) | 2026-10-01 | `20261002-121123` | 34 | 28 | 8 / 20 | NO |
+> | 2026-10-05 | 2026-10-04 | `20261005-112601` | 35 | 29 | 8 / 21 | NO |
+>
+> The 10-05 run used the new `--data-cut` argument (added 2026-10-05; default stays 2026-10-01, so a plain run reproduces the registered output).
 
 Each row was run through harness 6, the decision-bias tripwire (`tools/checks/measure/decision-bias/run-decision-bias.ps1`, 5 samples). My labels were written before the run (shadow-mode rule). Files: `docs/harness-runs/decision-bias-20261002T1527Z-{population,baseline,jev}.json`. **Jev flagged no row as `gives_up_for_economy`. My own label flags one (`A4L-9`).**
 

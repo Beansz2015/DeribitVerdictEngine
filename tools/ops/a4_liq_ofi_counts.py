@@ -120,15 +120,10 @@ class Event:
         self.last_fire = t0
 
 
-def scan_store(paths, cnt):
-    """One pass over the store. Parses only Timestamp, Amount, Direction, Liquidation."""
-    q = deque()
-    L = S = 0
-    events, spans = [], []
-    last_fire = None
-    in_span = False
-    span_start = span_end = 0
-    cur = None
+def iter_store_rows(paths, cnt):
+    """Yields (ts_ms, parts) per store trade, file order. parts = line.split(",", 5): columns 0..4 only;
+    column 1 (Price) is never converted. Checks each header; counts out-of-order timestamps.
+    (Factored out of scan_store 2026-10-05 for tools/ops/liq_tradeflow_counts.py; output unchanged.)"""
     prev_ts = None
     for path in paths:
         with open(path, encoding="utf-8") as f:
@@ -141,46 +136,74 @@ def scan_store(paths, cnt):
                 if prev_ts is not None and ts < prev_ts:
                     cnt["store_out_of_order"] += 1
                 prev_ts = ts
-                fl = p[4]
-                cnt["trades"] += 1
-                if fl == "none":
-                    c = None
-                else:
-                    cnt["flag_" + fl] += 1
-                    c = book(p[3], fl, int(round(float(p[2]))))
-                    if c is None:
-                        cnt["unrecognised_skipped"] += 1
-                q.append(c)
-                if c is not None:
-                    L += c[0]; S += c[1]
-                if len(q) > WIN:
-                    o = q.popleft()
-                    if o is not None:
-                        L -= o[0]; S -= o[1]
-                if L == 0 and S == 0 and not in_span:
-                    continue
-                side, size = dominant(L, S)
-                sess = session_of(utc(ts).hour)
-                fires = side is not None and size > LLS1[sess]
-                if fires:
-                    if last_fire is None or (ts - last_fire) > GAP_S * 1000:
-                        cur = Event(ts, side, sess, L, S)
-                        events.append(cur)
-                    else:
-                        cur.n_fire_trades += 1
-                        cur.last_fire = ts
-                        if side != cur.side:
-                            cur.two_sided = True
-                    last_fire = ts
-                    if not in_span:
-                        in_span, span_start = True, ts
-                    span_end = ts
-                elif in_span:
-                    spans.append((span_start, span_end))
-                    in_span = False
+                yield ts, p
+
+
+def scan_rows(rows, cnt, hook=None):
+    """The event scan over (ts_ms, parts) rows. hook, if given, is called once per trade AFTER the trade has been
+    booked into the window and the firing state evaluated: hook(ts, parts, booked, fires, onset), where booked is the
+    D-5 (long, short) tuple or None, fires is whether the window fires large at this trade, and onset is the new
+    Event when this trade is an onset, else None. hook=None is the original behaviour.
+    (Factored out of scan_store 2026-10-05 for tools/ops/liq_tradeflow_counts.py; output unchanged.)"""
+    q = deque()
+    L = S = 0
+    events, spans = [], []
+    last_fire = None
+    in_span = False
+    span_start = span_end = 0
+    cur = None
+    for ts, p in rows:
+        fl = p[4]
+        cnt["trades"] += 1
+        if fl == "none":
+            c = None
+        else:
+            cnt["flag_" + fl] += 1
+            c = book(p[3], fl, int(round(float(p[2]))))
+            if c is None:
+                cnt["unrecognised_skipped"] += 1
+        q.append(c)
+        if c is not None:
+            L += c[0]; S += c[1]
+        if len(q) > WIN:
+            o = q.popleft()
+            if o is not None:
+                L -= o[0]; S -= o[1]
+        if L == 0 and S == 0 and not in_span:
+            if hook is not None:
+                hook(ts, p, c, False, None)
+            continue
+        side, size = dominant(L, S)
+        sess = session_of(utc(ts).hour)
+        fires = side is not None and size > LLS1[sess]
+        onset = None
+        if fires:
+            if last_fire is None or (ts - last_fire) > GAP_S * 1000:
+                cur = Event(ts, side, sess, L, S)
+                events.append(cur)
+                onset = cur
+            else:
+                cur.n_fire_trades += 1
+                cur.last_fire = ts
+                if side != cur.side:
+                    cur.two_sided = True
+            last_fire = ts
+            if not in_span:
+                in_span, span_start = True, ts
+            span_end = ts
+        elif in_span:
+            spans.append((span_start, span_end))
+            in_span = False
+        if hook is not None:
+            hook(ts, p, c, fires, onset)
     if in_span:
         spans.append((span_start, span_end))
     return events, spans
+
+
+def scan_store(paths, cnt):
+    """One pass over the store. Parses only Timestamp, Amount, Direction, Liquidation."""
+    return scan_rows(iter_store_rows(paths, cnt), cnt)
 
 
 # ---------------------------------------------------------------- logged run grid
@@ -685,9 +708,17 @@ def main():
     ap.add_argument("--pooled", default=DEFAULT_POOLED)
     ap.add_argument("--fetch", default=DEFAULT_FETCH)
     ap.add_argument("--selftest", action="store_true")
+    # [2026-10-05, orchestrator] Ruling A4L-10 (a) re-counts at each store refresh, which needs a
+    # later cut (spec section 8, "A later cut"). Counts only: the cut never opens an outcome.
+    # Default = the pinned 2026-10-01, so a plain run reproduces the registered H-1 output.
+    ap.add_argument("--data-cut", default=None, help="exclusive UTC date YYYY-MM-DD; default 2026-10-01")
     a = ap.parse_args()
     if a.selftest:
         sys.exit(selftest())
+    if a.data_cut:
+        global DATA_CUT
+        DATA_CUT = datetime.strptime(a.data_cut, "%Y-%m-%d")
+    print("data cut (exclusive): %s%s" % (DATA_CUT.date(), "" if a.data_cut else " (registered default)"))
     t_start = time.time()
     print("A4 liquidation x OFI flip - logged-era counts (OUTCOME-BLIND). docs/a4-liq-ofi-logged-era-study-spec.md")
     paths = sorted(glob.glob(os.path.join(a.store, "trades_*.csv")))

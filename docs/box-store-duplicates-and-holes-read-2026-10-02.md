@@ -99,7 +99,7 @@ runs < 10,000, after the write-guard fix: runs=16 trades=70 in_single_ms_runs=70
 
 | Claim | Status |
 |---|---|
-| The current build (`bb14dc8`, the collector-halt fixes build, deployed 2026-09-29) writes no duplicates | ✅ **Checked 2026-10-02 on fetch `aws_fetch/20261002-121123`:** 0 duplicate rows appended after the 2026-09-29 20:51 deploy (~2.6 days; same block method, inline script). Comparison #2 (09-25 → 09-30): 0 holes, 0 field mismatches, 5 duplicate rows, all before the deploy |
+| The current build (`bb14dc8`, the collector-halt fixes build, deployed 2026-09-29) writes no duplicates | ✅ **Checked 2026-10-02 on fetch `aws_fetch/20261002-121123`:** 0 duplicate rows appended after the 2026-09-29 20:51 deploy (~2.6 days; same block method, inline script). ⚠ **SUPERSEDED 2026-10-05 by fetch `aws_fetch/20261005-112601`:** 129 duplicate rows in 4 blocks were appended after that fetch (10-02 15:35 · 10-03 03:35 · 10-03 15:35 · 10-04 15:35; 7 / 21 / 43 / 58 rows). Each block holds the ~30 s of trades before a repair pass, so it is the known `A79g` tail-overlap mechanism (live by design of `edd4539`), the same shape as the 09-23/09-24 blocks in this read §1. Not a new defect; readers dedupe; comparison #3 PASSED with them present. Comparison #2 (09-25 → 09-30): 0 holes, 0 field mismatches, 5 duplicate rows, all before the deploy |
 | Why the 7 rewrite passes' store scans failed | Unknown, as in the 2026-09-15 read's §3. The fix makes a failed scan loud (`SCAN_FAILED`) instead of silent |
 | The 20 small duplicate blocks are all `RR-1` repeat fills | Not attributed row by row; 63 rows |
 | 7 of the 138,817 same-ms trades have no kept sibling in their millisecond | Not examined; their class is assumed from the era |

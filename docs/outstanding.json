@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-03T20:00Z",
-  "updated_by": "seat orchestrator (handover 2026-10-01 seat), Opus 5.5 — every row checked against git and the D-tables",
+  "updated_utc": "2026-10-05T12:05Z",
+  "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — added the doc state register decisions (other rows from the orchestrator seat, 20:00Z)",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,13 +9,22 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 2 commits ahead of origin, docs only (rulings record + this pane update)",
+      "meaning": "Push master — 3 commits ahead of origin, docs and tools only (no engine code)",
       "since": "2026-10-04"
     },
     {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
+    },
+    {
+      "kind": "ruling",
+      "tick": true,
+      "id": "DSR-1..DSR-8",
+      "meaning": "Doc state register proposal: 8 decisions (register format, ID keys, backfill scope — reserved to you, timing). Not urgent: build after 2026-11-25",
+      "doc": "docs/doc-state-register-proposal.md",
+      "anchor": "§8",
+      "since": "2026-10-04"
     }
   ],
   "in_progress": [
@@ -26,16 +35,15 @@
       "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
       "doc": "docs/aws-collector-deploy-checklist.md",
       "anchor": "§5 deploy ledger"
+    },
+    {
+      "what": "Trade-flow-flip study after liquidation clusters, session 1: pre-registered spec and outcome-blind power count (2025-01-01 → 2026-07-02)",
+      "where": "agent (orchestrator-dispatched)",
+      "started_utc": "2026-10-05T11:30Z",
+      "check": "the orchestrator relays its report"
     }
   ],
   "dated": [
-    {
-      "date": "2026-10-04",
-      "approx": true,
-      "what": "Fetch with history comparison — also re-count the sealed liquidation × OFI study (tools/ops/a4_liq_ofi_counts.py)",
-      "doc": "docs/seat-handover-2026-10-01.md",
-      "anchor": "§0 FIRST ACTIONS item 5"
-    },
     {
       "date": "2026-10-08",
       "approx": true,
@@ -77,12 +85,6 @@
     }
   ],
   "next_up": [
-    {
-      "what": "Write the pre-registered spec for a trade-flow-flip study after liquidation clusters, trade store only, 2025-01-01 → 2026-07-02 (keeps the sealed OFI-flip study outcome-blind)",
-      "doc": "docs/a4-liq-ofi-logged-era-study-spec.md",
-      "anchor": "§9 RULED box",
-      "model": "Opus 5.5, high"
-    },
     {
       "what": "Adversarial review of the indicator review pack, in a fresh seat — attack its order and classes",
       "doc": "docs/indicator-calibration-review-2026-10-02.md",
