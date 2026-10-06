@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-06T09:45Z",
+  "updated_utc": "2026-10-06T10:00Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -16,11 +16,6 @@
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
-    },
-    {
-      "kind": "go",
-      "meaning": "Go for the trade-flow study's session 2 (the outcome read with the engine replay)? It is readable now (FLIP 171), but the best label is a full-span finding, not CONFIRMED, and the read unseals 2023-01 → 2026-07-02",
-      "since": "2026-10-06"
     }
   ],
   "in_progress": [
@@ -37,6 +32,12 @@
       "where": "AWS i-0b17cf2c2eb67496e (temporary)",
       "started_utc": "2026-10-05T13:20Z",
       "check": "tools/ops/rawbook/ssm-rawbook-status.json via aws ssm send-command"
+    },
+    {
+      "what": "Trade-flow-flip study session 2: the outcome read (engine-replay feasibility check first; unseals 2023-01 → 2026-07-02)",
+      "where": "agent (orchestrator-dispatched)",
+      "started_utc": "2026-10-06T09:58Z",
+      "check": "the orchestrator relays its report"
     }
   ],
   "dated": [
@@ -87,12 +88,6 @@
     }
   ],
   "next_up": [
-    {
-      "what": "Trade-flow-flip study session 2: outcome read with the engine replay of placed levels, on the re-registered span (feasibility check first)",
-      "doc": "docs/liq-tradeflow-flip-study-spec.md",
-      "anchor": "§14.0 session-2 brief",
-      "model": "Opus 5.5, high"
-    },
     {
       "what": "Adversarial review of the indicator review pack, in a fresh seat — attack its order and classes",
       "doc": "docs/indicator-calibration-review-2026-10-02.md",
