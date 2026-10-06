@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-06T10:00Z",
+  "updated_utc": "2026-10-06T14:20Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 8 commits ahead of origin: trade-flow re-registration (tool + spec), rulings, pane updates (no engine code)",
+      "meaning": "Push master — 11 commits ahead of origin: trade-flow session 2 part (a) tools, re-registration, pane updates (no engine code)",
       "since": "2026-10-06"
     },
     {
@@ -28,15 +28,9 @@
       "anchor": "§5 deploy ledger"
     },
     {
-      "what": "Raw order-book absorption probe, 24 h run (ends 2026-10-06 13:20 UTC). Ruled: let it finish; diagnose the 20 prior book mismatches before any verdict",
-      "where": "AWS i-0b17cf2c2eb67496e (temporary)",
-      "started_utc": "2026-10-05T13:20Z",
-      "check": "tools/ops/rawbook/ssm-rawbook-status.json via aws ssm send-command"
-    },
-    {
-      "what": "Trade-flow-flip study session 2: the outcome read (engine-replay feasibility check first; unseals 2023-01 → 2026-07-02)",
+      "what": "Trade-flow-flip study session 2: part (a) done (reproduction check passed, engine replay feasible); part (b), the outcome run, resumed after the session break",
       "where": "agent (orchestrator-dispatched)",
-      "started_utc": "2026-10-06T09:58Z",
+      "started_utc": "2026-10-06T14:15Z",
       "check": "the orchestrator relays its report"
     }
   ],
@@ -79,15 +73,15 @@
       "what": "Burst outcome run 2, NY session (when NY reaches 100 arm-A rows)",
       "doc": "docs/trader-tick-queue.md",
       "anchor": "TRADER AWAY block, 'After 2026-11-25 — first seats back'"
-    },
-    {
-      "due_utc": "2026-10-06T13:30Z",
-      "what": "Collect the raw-book probe output from S3; diagnose the 20 prior book mismatches BEFORE any verdict; then terminate the temporary instance (the 2023–2024 backfill pull already passed)",
-      "doc": "docs/raw-book-absorption-test-spec.md",
-      "anchor": "§8 cloud run, steps 5-7"
     }
   ],
   "next_up": [
+    {
+      "what": "Raw order-book absorption test, session 2: diagnose the 29 prior book mismatches first (0 exact), verdict only if all are comparison-timing artefacts. Output collected to C:\\DeribitData\rawbook-run1. Dispatch after the trade-flow agent finishes (one heavy agent at a time)",
+      "doc": "docs/raw-book-absorption-test-spec.md",
+      "anchor": "§0 ruling box and session-2 brief",
+      "model": "Opus 5.5, high"
+    },
     {
       "what": "Adversarial review of the indicator review pack, in a fresh seat — attack its order and classes",
       "doc": "docs/indicator-calibration-review-2026-10-02.md",
