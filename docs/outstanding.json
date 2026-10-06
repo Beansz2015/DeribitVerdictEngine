@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 27 commits ahead of origin: raw-book result and rulings, study records, pane updates (no engine code)",
+      "meaning": "Push master — 2 commits ahead of origin: pane updates only",
       "since": "2026-10-06"
     },
     {
