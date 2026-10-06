@@ -1,0 +1,43 @@
+Liquidation x TRADE-FLOW flip - SESSION 2 outcome read. docs/liq-tradeflow-flip-study-spec.md
+pins (tracked settings.json v69): fee 3.0 bps maker/maker; ATR period 7; fallback target x1.75 NY x2.0 LONDON x1.25 ASIA; stop x1.6; structural_levels {"enabled": true, "sessions": {"ASIA": {"fallback_target_atr_mult": 1.25}, "LONDON": {"fallback_target_atr_mult": 2.0}, "NY": {}}, "stop_arbitration_mode": 0, "stop_buffer_pct": 0.0, "stop_max_atr_mult": 1.6, "stop_min_floor_ticks": 4, "stop_too_loose_mode": "clamp", "target_arbitration_mode": 0, "target_buffer_pct": 0.0, "target_max_atr_mult": 3.5, "use_best_pivot_candidate": false}
+H-3: sections 1-6 of the re-run vs the H-4 block (docs/liq-tradeflow-flip-study-spec.md section 14.4): 152 vs 152 lines: PASS (identical)
+H-3 (information): the whole block incl. header, section 0 and section 7: 192 vs 192 lines: identical
+rows: event-variant rows 4905 (primary population 984), control rows 201040
+phase B: trades read 130722713 (fence stop: yes); candles 1m 1841759 3m 613920 5m 368352; empty buckets filled flat 1m 71545 3m 3183 5m 661
+phase B entry check: TFI30: entry = the trade after the 30th (ts >= its ts)   991
+phase B entry check: control: entry = first trade >= g + 60 s                 201040
+phase B entry check: time rule: entry ts >= D, previous trade ts < D          3914
+phase B entry check: time rule: phase-A ordinal == first trade >= D           3914
+phase L: candles: 1m 1841759  3m 613920  5m 368352
+phase L: rows placed: 205945  status (d)/(c): few_candles/few_candles=5  ok/ok=205940
+phase C: trades walked 130722713; walks 411880; resolved success 198978, stop 187995, timeout 24907; no trade in the window 0
+
+=== S0. Population and halves (registered; outcome-side drops are counted below, not re-split) ===
+primary population 984 (FLIP 171, NO-FLIP 813); control 201040; 512 event days; half H1 = 2023-01-08..2024-09-30 (256 days), half H2 = 2024-10-01..2026-06-30
+control rows: half by date (H1 = before 2024-10-01)
+
+=== S1. Outcome-side drops per arm (printed before any outcome) ===
+arm d placed levels (TFS-8 (d), primary)     FLIP     rows    171  dropped     0 (0.00 %)  -
+arm d placed levels (TFS-8 (d), primary)     NO-FLIP  rows    813  dropped     0 (0.00 %)  -
+arm d placed levels (TFS-8 (d), primary)     CONTROL  rows 201040  dropped     5 (0.00 %)  few_candles=5
+arm c ATR-fallback geometry (descriptive)    FLIP     rows    171  dropped     0 (0.00 %)  -
+arm c ATR-fallback geometry (descriptive)    NO-FLIP  rows    813  dropped     0 (0.00 %)  -
+arm c ATR-fallback geometry (descriptive)    CONTROL  rows 201040  dropped     5 (0.00 %)  few_candles=5
+TFS-H3 ATR tercile edges (USD, per session, from 201035 control rows with an engine ATR): ASIA 36.90 / 71.98  LONDON 37.51 / 70.13  NY 21.44 / 47.94
+
+=== S2. PRIMARY: placed levels (TFS-8 (d)), house net EV per trade ===
+fee 3.0 bps round trip (maker/maker); windows NY 15 min, ASIA/LONDON 45 min; bootstrap 10000 resamples of whole UTC days, seed 20261005
+
+| Arm | Session | n | Success % | Timeout % | Gross breakeven % | Net breakeven % | Net edge pp | Net EV per trade [95 % CI] | SD bps |
+|---|---|---|---|---|---|---|---|---|---|
+| FLIP | ALL | 171 | 52.0 | 9.9 | 51.3 | 57.8 | -5.8 | -1.1 [-5.1, +2.9] | 25.7 |
+| FLIP | ASIA | 51 (<100) | 52.9 | 7.8 | 56.4 | 62.7 | -9.8 | -6.1 [-14.8, +1.2] | 29.2 |
+| FLIP | LONDON | 21 (<100) | 42.9 | 23.8 | 41.7 | 47.6 | -4.7 | +3.8 [-7.8, +16.6] | 28.8 |
+| FLIP | NY | 99 (<100) | 53.5 | 8.1 | 50.9 | 57.6 | -4.1 | +0.5 [-4.4, +5.5] | 22.5 |
+| NO-FLIP | ALL | 813 | 45.9 | 9.3 | 50.5 | 54.7 | -8.8 | -4.2 [-6.8, -1.6] | 38.2 |
+| NO-FLIP | ASIA | 246 | 48.8 | 6.1 | 48.0 | 52.3 | -3.5 | -2.0 [-6.4, +2.3] | 38.6 |
+| NO-FLIP | LONDON | 130 | 33.1 | 10.0 | 48.0 | 52.0 | -18.9 | -10.8 [-17.8, -3.8] | 39.4 |
+| NO-FLIP | NY | 437 | 48.1 | 11.0 | 52.7 | 56.9 | -8.8 | -3.4 [-6.8, +0.0] | 37.3 |
+| BALANCED | ALL | 713 | 46.7 | 9.5 | 50.5 | 54.4 | -7.7 | -3.9 [-6.9, -0.9] | 39.8 |
+| BALANCED | ASIA | 213 | 51.6 | 6.1 | 48.2 | 52.2 | -0.6 | -1.3 [-6.3, +3.6] | 40.7 |
+| BALANCED | LONDON | 112 | 34.8 | 8.9 | 47.9 | 51.7 | -16.8 | -10.0 [-17.8, -2.3] | 41.4 |

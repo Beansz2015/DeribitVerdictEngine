@@ -818,7 +818,7 @@ def phase_s(ev_rows, ctl_rows, fee, out=print):
                  "TFS-H3": arm_rw([q for q in P if isF(q)] + Cn, isF, lambda q: q["r"]["cls"] == "CONTROL", s3, "TFS-H3 FLIP - CONTROL", "H3 " + arm + field)}
         if not primary:
             out("")
-            out("| Test | FULL d [95 %% CI] (n) | H1 half d (n) | H2 half d (n) | boot p | (descriptive: no Holm, no label) |")
+            out("| Test | FULL d [95 % CI] (n) | H1 half d (n) | H2 half d (n) | boot p | (descriptive: no Holm, no label) |")
             out("|---|---|---|---|---|---|")
             for t in ("TFS-H1", "TFS-H2", "TFS-H3"):
                 x = tests[t]
@@ -830,8 +830,8 @@ def phase_s(ev_rows, ctl_rows, fee, out=print):
         # trailing-tercile sensitivity (TFS-7): classes from the trailing 90-day terciles; rows without enough trailing
         # references are left out of the sensitivity run only
         Pt = [q for q in P if q["r"]["trail"] in ("FLIP", "BALANCED", "WITH")]
-        tF = lambda q: q["r"]["trail"] == "FLIP"
-        tN = lambda q: q["r"]["trail"] in ("BALANCED", "WITH")
+        tF = lambda q: q["r"].get("trail") == "FLIP"          # control rows carry no trailing class
+        tN = lambda q: q["r"].get("trail") in ("BALANCED", "WITH")
         sens = {"TFS-H1": arm_rw(Pt, tF, tN, s1, "sens H1", "sens"),
                 "TFS-H2": mean_test([q for q in Pt if tF(q)], "sens H2", "sens"),
                 "TFS-H3": arm_rw([q for q in Pt if tF(q)] + Cn, tF, lambda q: q["r"]["cls"] == "CONTROL", s3, "sens H3", "sens")}

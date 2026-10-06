@@ -1,0 +1,12 @@
+  File "C:\Dev\DeribitVerdictEngine\tools\ops\liq_tradeflow_read.py", line 997, in run
+    phase_s(ev_rows, ctl_rows, fee, out=out)
+  File "C:\Dev\DeribitVerdictEngine\tools\ops\liq_tradeflow_read.py", line 837, in phase_s
+    "TFS-H3": arm_rw([q for q in Pt if tF(q)] + Cn, tF, lambda q: q["r"]["cls"] == "CONTROL", s3, "sens H3", "sens")}
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Dev\DeribitVerdictEngine\tools\ops\liq_tradeflow_read.py", line 607, in arm_rw
+    if is_a(r): t = "WEAK"
+       ^^^^^^^
+  File "C:\Dev\DeribitVerdictEngine\tools\ops\liq_tradeflow_read.py", line 833, in <lambda>
+    tF = lambda q: q["r"]["trail"] == "FLIP"
+                   ~~~~~~^^^^^^^^^
+KeyError: 'trail'
