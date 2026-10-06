@@ -1,0 +1,67 @@
+{
+ "rev": "f9d0fb8b29ee385386ea94c7a5f8ee43f74bb974",
+ "rev7": "f9d0fb8",
+ "stamp_utc": "20261006T0908Z",
+ "builder": "re-registration seat, by hand",
+ "note": "STATE ONLY. Live reads.",
+ "items": [
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-13@f9d0fb8",
+   "question": "A pre-registered liquidation study is extended back to 2023-2024. Its 'large liquidation' bar is a per-session p90 of USD liquidation size, ruled on 2025-2026 data. Which threshold applies to which period?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "keep the 2025-2026 per-session values for the whole 2023-2026 span",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "per era: 2023-2024 gets its own per-session p90 pooled over its store; 2025-2026 keeps the ruled values",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "per half-year per session p90, for all seven half-years (also replaces the ruled 2025-2026 values)",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "one per-session p90 pooled over 2023-2026, replacing the ruled values",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "Same rule as the ruled values, applied to each store. Measured: the pooled p90 is 58,630 USD in 2023-2024 vs 60,000 in 2025-2026, so the premise for finer adaptation (USD drift with price) is false; half-year cells swing 2-4x with no price order, so (c) writes local noise into the event definition and changes the already-registered events. (a) ignores the ruling to re-derive per period and puts one session's bar above that era's own p90. (d) replaces the ruled values and is not per period.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "f9d0fb8b29ee385386ea94c7a5f8ee43f74bb974",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-14@f9d0fb8",
+   "question": "How do two trade stores (2023-2024 and 2025-2026) join in the event scan of a pre-registered study?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "one continuous pass across the seam, after a TradeSeq seam check that stops on a gap or duplicate",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "two independent passes, rolling-window and de-clustering state reset at 2025-01-01",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Keeps the 500-trade window and the 30-minute de-clustering correct across midnight; (b) would invent an onset at the seam if a cluster spans it. The seam check guarantees no trade is missing or doubled.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "f9d0fb8b29ee385386ea94c7a5f8ee43f74bb974",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

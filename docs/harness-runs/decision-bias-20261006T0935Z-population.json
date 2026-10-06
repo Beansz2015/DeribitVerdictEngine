@@ -1,0 +1,38 @@
+{
+ "rev": "95c5f15f2e53d9ecbe1f63dbc975bdddb7dcb23f",
+ "rev7": "95c5f15",
+ "stamp_utc": "20261006T0935Z",
+ "builder": "re-registration seat, by hand",
+ "note": "STATE ONLY. Live reads.",
+ "items": [
+  {
+   "id": "docs/liq-tradeflow-flip-study-spec.md|TFS-15@95c5f15",
+   "question": "A pre-registered study, re-registered on 2023-01 to 2026-07, now has 171 events in its key arm (floor 100), but its first chronological half holds 71, so the top label (both halves readable) cannot be reached by any split (171 < 200). Session 2 (the outcome read)?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "run session 2 as registered; the best attainable label is a full-span finding, halves descriptive",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "extend the span further back (2020-2022) before any outcome, to reach 200 events",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "re-define the halves (e.g. split by key-arm events, not event days) before any outcome",
+     "src": "docs/liq-tradeflow-flip-study-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The full-span tests are readable on all three hypotheses. (b) was ruled out by the trader when the 2023-2024 extension was chosen (2020-2022 is a different market regime). (c) cannot help: 171 split any way leaves one half under 100, and changing the halving rule after seeing counts is a degree of freedom.",
+   "question_src": "docs/liq-tradeflow-flip-study-spec.md",
+   "rationale_src": [
+    "docs/liq-tradeflow-flip-study-spec.md"
+   ],
+   "state_rev": "95c5f15f2e53d9ecbe1f63dbc975bdddb7dcb23f",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

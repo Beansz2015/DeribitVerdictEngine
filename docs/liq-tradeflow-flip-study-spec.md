@@ -476,7 +476,24 @@ No choice here touches `settings.json`, scoring, a rendered value or a CSV schem
 ## 14. Re-registration 2026-10-06 (span 2023-01-01 → 2026-07-02)
 
 **Owed by:** ruling `TFS-12` = (c), scoped to 2023–2024 (`docs/liq-tradeflow-flip-study-spec.md` §9 RULED box, trader 2026-10-05). Also applies the rulings `TFS-6` = (b) (5-min reference grid) and `TFS-8` = (d) (session 2 replays the engine's placed levels).
-**Start commit:** `cd11e6b`. **No outcome has been computed, printed or looked at.**
+**Start commit:** `cd11e6b`. **Rule commit:** `f9d0fb8` (thresholds stated before any extended-span count). **Tool commit:** `95c5f15`. Counts run at `95c5f15`. **No outcome has been computed, printed or looked at.**
+**Verdict:** **READABLE on all three Holm tests** (FLIP 171 · NO-FLIP 813 · control 201,040). ⚠ CONFIRMED is out of reach: the first chronological half holds FLIP 71 (decision `TFS-15`, `docs/liq-tradeflow-flip-study-spec.md` §14.7).
+
+### 14.0 Model and effort for SESSION 2 (the outcome run) — supersedes `docs/liq-tradeflow-flip-study-spec.md` §1 where they differ
+
+**Model: Opus 5.5 · Effort: HIGH.** Session split: (a) build the outcome script, its self-test and the replay feasibility check — **Opus 5.5, high**; (b) run it — **Opus 5.5, high**.
+
+- **Why that tier:** the design is fixed. The work is (1) making the engine replay of placed levels (`TFS-8` (d)) run on two history stores, and (2) holding the registered design against the tape after outcomes are seen. FLIP is 171, so every per-event judgement still shows in the result. The replay feasibility is unverified (`docs/liq-tradeflow-flip-study-spec.md` §14.10), so (a) is not a mechanical build.
+- **Where it will slip:**
+  1. **Reading past the fence.** Every outcome walk and every replay candle must stop before 2026-07-03 00:00 UTC. Keep the fenced reader; do not glob either store. The 2025–2026 store holds 2026-07 … 2026-10 files.
+  2. **One store only.** The outcome script must read BOTH stores in order (`STORE_2023` then the main store) through `fenced_rows`. A script that reads only `C:\DeribitData\history\` reproduces 2025–2026 and silently drops 575 of 991 events.
+  3. **The wrong era threshold.** Import `run_pass` from `tools/ops/liq_tradeflow_counts.py`; do not re-implement the event scan. `run_pass` installs the per-era `LLS-1` table (`TFS-13`) and restores it.
+  4. **The fade side, entry inside the flow window, ATR from the wrong candles** — as `docs/liq-tradeflow-flip-study-spec.md` §1 items 2–4.
+  5. **Replay inputs that the history store lacks.** The engine replay may need inputs that are not in a trade-only store (funding, order book, open interest). If a placed level depends on one, it cannot be replayed faithfully. Then fall back to `TFS-8` (c), **say so before any outcome is read**, and record which arm lost what.
+  6. **Half-year splits are not tests.** Every half-year has FLIP 10–35. They print with CIs and are never labelled.
+- **`H-3` (re-pinned):** the outcome script must reproduce sections 1–6 of the `H-4` block (`docs/liq-tradeflow-flip-study-spec.md` §14.4) exactly before it opens any price after D.
+- **Escalate** (stop, report, do not decide) if: `H-3` fails; the replay cannot place levels for more than 10 % of an arm for a reason that is not one of the named drops; the replay needs an input the history store does not hold; any rule in `docs/liq-tradeflow-flip-study-spec.md` §4 cannot be applied as written; or the pins in `docs/liq-tradeflow-flip-study-spec.md` §14.5 differ from tracked `settings.json`.
+- **The fixtures cannot catch a misunderstanding.** The seat writes the outcome script and its self-test, so a wrong reading of the design passes its own test. The guard is `H-3`.
 
 ### 14.1 Thresholds per period — stated BEFORE any FLIP count on the extended span
 
@@ -516,11 +533,320 @@ No choice here touches `settings.json`, scoring, a rendered value or a CSV schem
 - **Reason.** It is the ruled `LLS-1` rule — per-session p90 of the `D-5` dominant size, pooled over a whole store — applied to each store. That is "re-derive the per-session thresholds per period" at the granularity `LLS-1` was ruled. It leaves the registered 2025–2026 events unchanged, so the session-1 counts stay a checkable subset.
 - **Strict `>`**, as before. One continuous pass across the seam (`TFS-14`): the 500-trade window and the 30-min de-clustering carry over from 2024-12-31 into 2025-01-01. A window evaluated at a 2025 trade uses the 2025 era threshold, even if it still holds 2024 trades.
 
+### 14.2 What the tool now does (`tools/ops/liq_tradeflow_counts.py` at `95c5f15`)
+
+| Change | Rule | Guard |
+|---|---|---|
+| Two stores, one pass | `--span extended` (the default) reads `C:\DeribitData\history-2023-2024\trades_2023-01.csv` … `trades_2024-12.csv`, then `C:\DeribitData\history\trades_2025-01.csv` … `trades_2026-07.csv`, by explicit name, as one row stream (`TFS-14` (a)) | Self-test run C |
+| Store seam | Before any count: the last trade of `trades_2024-12.csv` vs the first trade of `trades_2025-01.csv`. PASS needs `TradeSeq` + 1 and time not backward. A FAIL is a STOP (`SystemExit`). Month-file seams inside each store are checked and printed, not a STOP | Self-test seam cases (4) and the STOP case |
+| Per-era thresholds | `EraThresholds` replaces `a4.LLS1` for the pass and is restored after it. Era = the timestamp of the trade that evaluates the window. A trade exactly at an era start belongs to the new era (`TFS-13` (b)) | Self-test run C: each size sits between the two eras' bars |
+| Reference grid | 5 min on the extended span (`TFS-6` (b), ruled); 15 min on `--span registered` | Unchanged grid code |
+| Fence | Unchanged: stop at the first line ≥ 2026-07-03 00:00 UTC; every trade passed on is asserted < the fence | Session-1 run B and mutant M21 |
+| Sister code | `tools/ops/a4_liq_ofi_counts.py` is **not edited**. Its `scan_rows` is imported and reads the swapped table | — |
+| `--span registered` | Session 1 exactly: one store, `LLS-1` only, 15-min grid | `H-5` |
+
+**Handles and evidence.**
+
+| Handle | Command (repo root) | Expected |
+|---|---|---|
+| `H-4` | `python tools/ops/liq_tradeflow_counts.py` at `95c5f15` | The block in `docs/liq-tradeflow-flip-study-spec.md` §14.4, line for line, except the last line (`runtime N s`; 319 s here). Depends on both stores being unchanged (pins in `docs/liq-tradeflow-flip-study-spec.md` §14.5) |
+| `H-5` | `python tools/ops/liq_tradeflow_counts.py --span registered` at `95c5f15` | The session-1 `H-1` block (`docs/liq-tradeflow-flip-study-spec.md` §6.2), line for line, except the runtime line. **Run 2026-10-06: `diff --strip-trailing-cr` against the block at `1da3c6d` printed nothing; md5 of both 138-line blocks (CR stripped) `89faaea29f17e6039af357f59f769b8f`**; runtime 140 s |
+| `H-6` | `python tools/ops/liq_tradeflow_counts.py --selftest` | `SELFTEST PASS (0 failure(s))`, **36 checks** (session 1's 27, run C 4, seam 5) |
+| `E-3` (evidence) | 10 one-line mutants in scratch copies outside the repo, each run with `--selftest` | **All 10 red** (failures in brackets): M12 era lookup always the first table (2) · M13 always the last table (2) · M14 era edge `bisect_left`, so a trade at an era start stays in the old era (2) · M15 era not set before the trade is yielded (3) · M16 `a4.LLS1` not restored (1) · M17 seam accepts a gap (2) · M18 seam accepts a duplicate (1) · M19 seam time check dropped (1) · M20 a failed store seam is not a STOP (1) · M21 fence `>` not `>=` (run B raised on a poisoned line). To repeat: make the named edit in a copy, with `a4_liq_ofi_counts.py` beside it, and run `--selftest` |
+
+### 14.3 Seam
+
+- **PASS.** `trades_2024-12.csv` last trade: seq 230,579,796 at 2024-12-31 23:59:51.580 UTC. `trades_2025-01.csv` first trade: seq 230,579,797 at 2025-01-01 00:00:01.635 UTC. This matches the backfill record.
+- Month-file seams inside the two stores: 41 checked, 0 FAIL.
+- The 2023–2024 store's own status file reports 731 days OK, 0 gap, 0 failed, and a deep check of 0 unparseable / 0 duplicate / 0 missing in all 24 months. Carried from `C:\DeribitData\history-2023-2024\status_final.txt` (read, not re-derived).
+
+### 14.4 Output of `H-4` (pasted, not edited; runtime line omitted)
+
+```
+Liquidation x TRADE-FLOW flip - counts (OUTCOME-BLIND). docs/liq-tradeflow-flip-study-spec.md
+store files: 43 in 2 stores, read in this order as one pass, bytes 11038578775
+  C:/DeribitData/history-2023-2024  trades_2023-01.csv .. trades_2024-12.csv  files 24  bytes 5567792193
+  C:/DeribitData/history  trades_2025-01.csv .. trades_2026-07.csv  files 19  bytes 5470786582
+store seam trades_2024-12.csv -> trades_2025-01.csv: last seq 230579796 at 2024-12-31 23:59:51.580000, first seq 230579797 at 2025-01-01 00:00:01.635000: PASS
+month-file seams inside each store: 41 checked, 0 FAIL
+=== 0. Inputs and pins ===
+fence: trades < 2026-07-03 00:00:00 UTC (1783036800000 ms); first trade read 2023-01-01 00:00:05.853000; last trade read 2026-07-02 23:58:51.992000; fence stop hit: yes
+assert max trade read < fence: PASS
+LLS-1 thresholds per era (USD, strict >; era = the evaluating trade's timestamp; TFS-13 (b))  window=500 trades  dominance=2.0  de-cluster gap=30 min
+  era 1 from 2023-01-01  2023-01-01 .. 2024-12-31 (2023-2024 store p90) ASIA=61060 LONDON=50939 NY=58630  trades scanned 67654894
+  era 2 from 2025-01-01  2025-01-01 .. 2026-07-02 (LLS-1, ruled)      ASIA=69535 LONDON=83250 NY=49724  trades scanned 63067819
+store: trades=130722713  flags T=131624 M=20699 MT=77  unrecognised skipped=0  out-of-order=0
+flow: variants Q0L60,Q0L30,Q0L120,Q30L60,TFI30 (primary Q0L60)  N_MIN=10  cap D-T0<=30 min  grid=5 min  ref exclusion: firing in [g-30 min, window end)
+engine TFI (tracked settings.json v69): window 30 trades, threshold 0.15 (TFI30 descriptive class only)
+hold window for the outcome-fence check: NY 15 min, ASIA 45 min, LONDON 45 min
+counters: flow_bad_direction=0  flow_flag_out_of_order=0  grid_out_of_order_skipped=0
+firing spans=2326  events (onsets)=991
+
+=== 1. Events per session x period (LONG/SHORT = liquidated side; onset T0) ===
+period    ASIA L/S      LONDON L/S    NY L/S        all   two-sided
+2023H1    13/14         5/9           32/27         100   5
+2023H2    13/10         8/5           23/23         82    3
+2024H1    33/24         25/23         64/46         215   9
+2024H2    51/10         17/8          66/26         178   3
+2025H1    43/6          9/7           58/20         143   6
+2025H2    39/8          12/5          51/21         136   9
+2026H1*   28/9          14/7          55/24         137   6
+all       991 events over 1279 days = 0.77 per day
+
+=== 2. Flow-window coverage, primary Q0L60 (counts per session x period) ===
+session period    events  measured   not_quiet  thin_flow  flow_wind  outcome_fence  population
+ASIA    2023H1        27         27          0          0          0              0          27
+ASIA    2023H2        23         22          0          1          0              0          22
+ASIA    2024H1        57         56          0          1          0              0          56
+ASIA    2024H2        61         60          0          1          0              0          60
+ASIA    2025H1        49         48          0          1          0              0          48
+ASIA    2025H2        47         47          0          0          0              0          47
+ASIA    2026H1*       37         37          0          0          0              0          37
+ASIA    all          301        297          0          4          0              0         297
+LONDON  2023H1        14         14          0          0          0              0          14
+LONDON  2023H2        13         13          0          0          0              0          13
+LONDON  2024H1        48         47          0          1          0              0          47
+LONDON  2024H2        25         25          0          0          0              0          25
+LONDON  2025H1        16         16          0          0          0              0          16
+LONDON  2025H2        17         16          0          1          0              0          16
+LONDON  2026H1*       21         20          0          1          0              0          20
+LONDON  all          154        151          0          3          0              0         151
+NY      2023H1        59         59          0          0          0              0          59
+NY      2023H2        46         46          0          0          0              0          46
+NY      2024H1       110        110          0          0          0              0         110
+NY      2024H2        92         92          0          0          0              0          92
+NY      2025H1        78         78          0          0          0              0          78
+NY      2025H2        72         72          0          0          0              0          72
+NY      2026H1*       79         79          0          0          0              0          79
+NY      all          536        536          0          0          0              0         536
+ALL     2023H1       100        100          0          0          0              0         100
+ALL     2023H2        82         81          0          1          0              0          81
+ALL     2024H1       215        213          0          2          0              0         213
+ALL     2024H2       178        177          0          1          0              0         177
+ALL     2025H1       143        142          0          1          0              0         142
+ALL     2025H2       136        135          0          1          0              0         135
+ALL     2026H1*      137        136          0          1          0              0         136
+ALL     all          991        984          0          7          0              0         984
+ASIA    measured: D-T0 s p50/p90/max 63/134/1450  liquidation-print resets p50/p90 9/85  trades in window p10/p50 56/285  500-window still fires at D 177/297
+LONDON  measured: D-T0 s p50/p90/max 63/130/282  liquidation-print resets p50/p90 11/70  trades in window p10/p50 55/332  500-window still fires at D 77/151
+NY      measured: D-T0 s p50/p90/max 64/136/1601  liquidation-print resets p50/p90 11/70  trades in window p10/p50 115/395  500-window still fires at D 270/536
+ALL     measured: D-T0 s p50/p90/max 63/133/1601  liquidation-print resets p50/p90 10/72  trades in window p10/p50 77/350  500-window still fires at D 524/984
+
+=== 3. Reference grid (signal side): windows kept and tercile edges of signed imbalance I ===
+Q0L60   ASIA    kept  98114  edges lo -0.5086 hi +0.5193  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.146
+Q0L60   LONDON  kept  61963  edges lo -0.4850 hi +0.5192  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.135
+Q0L60   NY      kept 141492  edges lo -0.4201 hi +0.4136  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.101
+Q0L60   drops: firing_within_30min=7139  flag_in_window=3306  thin=55677
+Q0L30   ASIA    kept  77592  edges lo -0.6211 hi +0.6618  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.227
+Q0L30   LONDON  kept  49700  edges lo -0.6207 hi +0.6644  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.215
+Q0L30   NY      kept 119270  edges lo -0.5168 hi +0.5240  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.162
+Q0L30   drops: firing_within_30min=7397  flag_in_window=1790  thin=111942
+Q0L120  ASIA    kept 111307  edges lo -0.3837 hi +0.3769  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.069
+Q0L120  LONDON  kept  69496  edges lo -0.3618 hi +0.3734  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.064
+Q0L120  NY      kept 154087  edges lo -0.3138 hi +0.3140  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.048
+Q0L120  drops: firing_within_30min=6791  flag_in_window=5782  thin=20228
+Q30L60  ASIA    kept  98114  edges lo -0.5086 hi +0.5193  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.146
+Q30L60  LONDON  kept  61963  edges lo -0.4850 hi +0.5192  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.135
+Q30L60  NY      kept 141492  edges lo -0.4201 hi +0.4136  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.101
+Q30L60  drops: firing_within_30min=7139  flag_in_window=3306  thin=55677
+TFI30   ASIA    kept 114741  edges lo -0.6148 hi +0.6303  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.190
+TFI30   LONDON  kept  71475  edges lo -0.6129 hi +0.6317  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.193
+TFI30   NY      kept 158495  edges lo -0.5772 hi +0.5886  shares <lo 0.333  mid 0.333  >hi 0.333  |I|=1 share 0.173
+TFI30   drops: firing_within_30min=7690  flag_in_window=552  thin=14738
+TFI30 reference share beyond the engine threshold: > +0.15 0.463   < -0.15 0.458
+
+=== 4. Flip state, primary Q0L60, population (measured, outcome window before the fence) ===
+session side    period     FLIP  BALANCED  WITH  | NO-FLIP
+ASIA    LONG    all          38       152    27  |     179
+ASIA    SHORT   all          13        61     6  |      67
+ASIA    both    2023H1        4        20     3  |      23
+ASIA    both    2023H2        3        16     3  |      19
+ASIA    both    2024H1        9        43     4  |      47
+ASIA    both    2024H2       14        39     7  |      46
+ASIA    both    2025H1        7        34     7  |      41
+ASIA    both    2025H2       13        27     7  |      34
+ASIA    both    2026H1*       1        34     2  |      36
+ASIA    both    all          51       213    33  |     246
+LONDON  LONG    all          14        66     7  |      73
+LONDON  SHORT   all           7        46    11  |      57
+LONDON  both    2023H1        2        10     2  |      12
+LONDON  both    2023H2        3        10     0  |      10
+LONDON  both    2024H1        3        41     3  |      44
+LONDON  both    2024H2        5        18     2  |      20
+LONDON  both    2025H1        3        12     1  |      13
+LONDON  both    2025H2        2        11     3  |      14
+LONDON  both    2026H1*       3        10     7  |      17
+LONDON  both    all          21       112    18  |     130
+NY      LONG    all          61       256    32  |     288
+NY      SHORT   all          38       132    17  |     149
+NY      both    2023H1        8        50     1  |      51
+NY      both    2023H2        4        36     6  |      42
+NY      both    2024H1       16        87     7  |      94
+NY      both    2024H2       16        65    11  |      76
+NY      both    2025H1       14        57     7  |      64
+NY      both    2025H2       20        46     6  |      52
+NY      both    2026H1*      21        47    11  |      58
+NY      both    all          99       388    49  |     437
+ALL     LONG    2023H1        4        45     1  |      46
+ALL     LONG    2023H2        6        31     6  |      37
+ALL     LONG    2024H1       17        95     9  |     104
+ALL     LONG    2024H2       23        97    13  |     110
+ALL     LONG    2025H1       19        78    12  |      90
+ALL     LONG    2025H2       29        60    12  |      72
+ALL     LONG    2026H1*      15        68    13  |      81
+ALL     LONG    all         113       474    66  |     540
+ALL     SHORT   2023H1       10        35     5  |      40
+ALL     SHORT   2023H2        4        31     3  |      34
+ALL     SHORT   2024H1       11        76     5  |      81
+ALL     SHORT   2024H2       12        25     7  |      32
+ALL     SHORT   2025H1        5        25     3  |      28
+ALL     SHORT   2025H2        6        24     4  |      28
+ALL     SHORT   2026H1*      10        23     7  |      30
+ALL     SHORT   all          58       239    34  |     273
+ALL     both    2023H1       14        80     6  |      86
+ALL     both    2023H2       10        62     9  |      71
+ALL     both    2024H1       28       171    14  |     185
+ALL     both    2024H2       35       122    20  |     142
+ALL     both    2025H1       24       103    15  |     118
+ALL     both    2025H2       35        84    16  |     100
+ALL     both    2026H1*      25        91    20  |     111
+ALL     both    all         171       713   100  |     813
+half H1 (first floor(D/2) of 512 event days): 2023-01-08..2024-09-30  FLIP 71  NO-FLIP 408
+half H2 (first floor(D/2) of 512 event days): 2024-10-01..2026-06-30  FLIP 100  NO-FLIP 405
+weekday FLIP/NO-FLIP 145/703   weekend FLIP/NO-FLIP 26/110
+population events whose episode also fired on the other side (kept; counted only): 41
+
+=== 5. Variants and threshold sensitivity (descriptive; signal side) ===
+Q0L60   measured 984 (cap 0, thin 7, fence 0)  outcome-fence 0  FLIP 171 BALANCED 713 WITH 100
+Q0L30   measured 958 (cap 0, thin 33, fence 0)  outcome-fence 0  FLIP 150 BALANCED 717 WITH 91
+Q0L120  measured 989 (cap 1, thin 1, fence 0)  outcome-fence 0  FLIP 189 BALANCED 678 WITH 122
+Q30L60  measured 983 (cap 0, thin 8, fence 0)  outcome-fence 0  FLIP 170 BALANCED 702 WITH 111
+TFI30   measured 991 (cap 0, thin 0, fence 0)  outcome-fence 0  FLIP 303 BALANCED 391 WITH 297  | engine threshold +-0.15: FLIP 480 BALANCED 89 WITH 422
+trailing 90-day terciles (min 1000 refs) vs full-span, primary population:
+  full FLIP     -> trailing FLIP 154  BALANCED 12  WITH 0  too_few_trailing_ref 5
+  full BALANCED -> trailing FLIP 14  BALANCED 687  WITH 5  too_few_trailing_ref 7
+  full WITH     -> trailing FLIP 0  BALANCED 7  WITH 93  too_few_trailing_ref 0
+primary vs Q30L60 (30 s buffer after the last print), primary population: FLIP->FLIP=78  FLIP->BALA=80  FLIP->WITH=12  FLIP->none=1  BALA->FLIP=85  BALA->BALA=575  BALA->WITH=51  BALA->none=2  WITH->FLIP=7  WITH->BALA=46  WITH->WITH=45  WITH->none=2
+
+=== 6. Flow-only control pool (TFS-H3): primary reference windows in an outer tercile, traded with the flow ===
+ASIA    2023H1 L/S 4260/4224  2023H2 L/S 3937/4062  2024H1 L/S 4574/4646  2024H2 L/S 4724/4530  2025H1 L/S 4773/4767  2025H2 L/S 5215/5070  2026H1* L/S 5221/5405  all 65408
+LONDON  2023H1 L/S 2663/2582  2023H2 L/S 2497/2555  2024H1 L/S 2688/2865  2024H2 L/S 2920/2913  2025H1 L/S 3210/3037  2025H2 L/S 3304/3386  2026H1* L/S 3372/3316  all 41308
+NY      2023H1 L/S 6246/6235  2023H2 L/S 6066/6245  2024H1 L/S 6561/6597  2024H2 L/S 6791/6520  2025H1 L/S 6797/6818  2025H2 L/S 7488/7302  2026H1* L/S 7213/7445  all 94324
+control rows dropped for the outcome fence: 3
+
+=== 7. Power (outcome-blind; sigma is a CARRIED proxy, not measured for this population) ===
+population: FLIP 171  NO-FLIP 813  (covered session x side strata: FLIP 171  NO-FLIP 813)  control 201040
+Holm over 3 tests, familywise 0.05: first-step alpha 0.0167 (worst case), last-step alpha 0.05 (best case)
+MDE in sigma units at the worst-case alpha: H1 0.272  H2 0.247  H3 0.248
+test                         sigma (bps)          MDE80 worst/best   pow@5bps  pow@10bps  pow@20bps  pow@40bps   readable (n>=100)
+TFS-H1 FLIP - NO-FLIP       conservative x2.45  84.0    22.9/19.8         0.05       0.16       0.67       1.00   yes
+TFS-H2 FLIP vs 0            conservative x2.45  84.0    20.8/18.0         0.05       0.20       0.76       1.00   yes
+TFS-H3 FLIP - control       conservative x2.45  84.0    20.8/18.0         0.05       0.20       0.76       1.00   yes
+TFS-H1 FLIP - NO-FLIP       optimistic x2.45    36.0     9.8/8.5          0.23       0.82       1.00       1.00   yes
+TFS-H2 FLIP vs 0            optimistic x2.45    36.0     8.9/7.7          0.28       0.89       1.00       1.00   yes
+TFS-H3 FLIP - control       optimistic x2.45    36.0     8.9/7.7          0.28       0.89       1.00       1.00   yes
+TFS-H1 FLIP - NO-FLIP       optimistic x1       14.7     4.0/3.5          0.95       1.00       1.00       1.00   yes
+TFS-H2 FLIP vs 0            optimistic x1       14.7     3.6/3.1          0.98       1.00       1.00       1.00   yes
+TFS-H3 FLIP - control       optimistic x1       14.7     3.6/3.2          0.98       1.00       1.00       1.00   yes
+period 2023H1   FLIP 14  NO-FLIP 86  readable NO
+period 2023H2   FLIP 10  NO-FLIP 71  readable NO
+period 2024H1   FLIP 28  NO-FLIP 185  readable NO
+period 2024H2   FLIP 35  NO-FLIP 142  readable NO
+period 2025H1   FLIP 24  NO-FLIP 118  readable NO
+period 2025H2   FLIP 35  NO-FLIP 100  readable NO
+period 2026H1*  FLIP 25  NO-FLIP 111  readable NO
+```
+
+### 14.5 Readability, power and run pins
+
+| Reading | Value | Consequence |
+|---|---|---|
+| Events | **991** in 1,279 days (0.77/day). 2023–2024: 575; 2025–2026: 416 | The extension more than doubles the events |
+| Flow coverage | 984 measured; 7 thin; 0 cap, 0 fence, 0 outcome-fence drops | The anchor rule still loses nothing |
+| Flip state | **FLIP 171 · BALANCED 713 · WITH 100** (FLIP 17 %) | FLIP clears the floor of 100 |
+| By era | 2023–2024: FLIP 87 of 571 population. 2025–2026: FLIP 84 of 413 | ⚠ The 2023 FLIP rate is low: 2023H1 14 of 100, 2023H2 10 of 81. Recorded, **not acted on** |
+| Halves (event days) | H1 2023-01-08 → 2024-09-30: FLIP **71**, NO-FLIP 408. H2 2024-10-01 → 2026-06-30: FLIP 100, NO-FLIP 405 | ⚠ Half H1 is NOT READABLE. 171 < 200, so **no** split gives two readable halves. CONFIRMED is out of reach (`TFS-15`) |
+| Half-years | FLIP 10–35 each | Descriptive only, as registered (`TFS-10`) |
+| Control | 201,040 rows (3 dropped for the outcome fence) | Not the binding constraint |
+| Variants | `Q0L120` FLIP 189 · `Q30L60` 170 · `Q0L30` 150 · `TFI30` terciles 303 | Descriptive. 80 of 171 FLIP become BALANCED with the 30 s buffer — the same pattern as session 1 (44 of 87) |
+| Trailing terciles | 154 of 166 classifiable FLIP stay FLIP; 5 lack trailing history | The full-span edge is not driving FLIP |
+
+**Power verdict.**
+
+- **READABLE on `TFS-H1`, `TFS-H2` and `TFS-H3`** by the census rule: FLIP 171, NO-FLIP 813, control 201,040, all session × side strata covered.
+- **MDE at 80 % power, Holm first-step α 0.0167:** `TFS-H1` 22.9 bps (conservative σ × 2.45) · 9.8 bps (optimistic × 2.45) · 4.0 bps (optimistic × 1). In σ units: 0.27 (`TFS-H1`), 0.25 (`TFS-H2`, `TFS-H3`). Session 1 had 32.8 / 14.1 / 5.7 bps.
+- **σ is still carried, not measured** (`docs/liq-tradeflow-flip-study-spec.md` §6.3). The ×2.45 scale comes from the 2026 logged era. It is not checked for 2023–2024.
+- **The best attainable label is below CONFIRMED.** The census label rule (`TFS-10`) needs both halves readable for CONFIRMED. Half H1 holds FLIP 71, so a Holm-significant full-span result is a finding that the halves cannot replicate.
+
+**Run pins (supersede `docs/liq-tradeflow-flip-study-spec.md` §8 for session 2).**
+
+| Pin | Value |
+|---|---|
+| Data, 2023–2024 store | `C:\DeribitData\history-2023-2024\trades_2023-01.csv` … `trades_2024-12.csv`: 24 files, 5,567,792,193 bytes, 67,654,894 trades |
+| Data, 2025–2026 store | `C:\DeribitData\history\trades_2025-01.csv` … `trades_2026-07.csv`: 19 files, 5,470,786,582 bytes; 63,067,819 trades before the fence |
+| Total | 43 files, 11,038,578,775 bytes, 130,722,713 trades read. First 2023-01-01 00:00:05.853 UTC, last 2026-07-02 23:58:51.992 UTC; 0 out of order |
+| Fence | 2026-07-03 00:00:00.000 UTC, exclusive, for events, flow windows, reference windows, outcome windows and replay candles |
+| Thresholds | Era 1 (2023–2024): ASIA 61,060 · LONDON 50,939 · NY 58,630 USD. Era 2 (from 2025-01-01): ASIA 69,535 · LONDON 83,250 · NY 49,724 USD (`LLS-1`). Strict `>` |
+| Reference grid | 5 min |
+| Tool | `tools/ops/liq_tradeflow_counts.py` at `95c5f15`. Sister event code `tools/ops/a4_liq_ofi_counts.py` not edited by this seat |
+| Seed / resamples | 20261005 / 10,000 (unchanged) |
+| Settings | Tracked `settings.json` version 69, re-read 2026-10-06: fee maker/maker 1.5 + 1.5 = 3 bps; ATR period 7; target ×1.75 NY, ×2.0 LONDON, ×1.25 ASIA; stop ×1.6; `indicators.TFI` window 30, threshold 0.15. Unchanged from `docs/liq-tradeflow-flip-study-spec.md` §8 |
+| Outcome measure | `TFS-8` (d): engine replay of placed levels. Fallback (c), stated before any outcome, if the replay cannot run |
+
+### 14.6 What changed vs session 1, and why
+
+| Item | Session 1 | Re-registration | Why |
+|---|---|---|---|
+| Span | 2025-01-01 → 2026-07-02, 548 days | 2023-01-01 → 2026-07-02, 1,279 days | `TFS-12` (c), ruled |
+| Stores | 1 | 2, one pass, seam checked | `TFS-14` (a) |
+| Thresholds | `LLS-1` everywhere | Per era (`docs/liq-tradeflow-flip-study-spec.md` §14.1) | `TFS-13` (b) |
+| Reference grid | 15 min | 5 min | `TFS-6` (b), ruled |
+| Tercile edges (`Q0L60`) | ASIA −0.5219/+0.5116 · LONDON −0.4765/+0.5474 · NY −0.4218/+0.4109 | ASIA −0.5086/+0.5193 · LONDON −0.4850/+0.5192 · NY −0.4201/+0.4136 | Same rule (`TFS-5`, `TFS-7`), longer span and finer grid |
+| 2025–2026 events | 416 (143 / 136 / 137) | **416, identical per session × side × period** | The era rule keeps 2025–2026 on `LLS-1`; the identical counts show the seam changed no 2025–2026 onset |
+| 2025–2026 population | 413 | 413, identical per session × period | — |
+| 2025–2026 FLIP | 87 (25 / 36 / 26) | 84 (24 / 35 / 25) | Edges only (new grid, longer span). No event changed |
+| FLIP / NO-FLIP | 87 / 326 — NOT READABLE | 171 / 813 — READABLE | More data, same measure |
+| Halves | FLIP 41 / 46 | FLIP 71 / 100 | Half H1 is still under the floor |
+
+**Unchanged:** the flow window, the anchor rule, the classification, the arms, the outcome definition, the statistics, Holm across three tests (`A4L-9` (b)), the 30-min de-clustering and the session hours.
+
 ### 14.7 Decisions (new IDs continue `TFS-n`; `TFS-13` and `TFS-14` written before any extended-span count)
 
 `TFS-13` … are free: `git grep -n -E "TFS-1[3-9]|TFS-2[0-9]"` at `2fd9209` printed nothing.
 
 | ID | Question | Options | My read | Status |
 |---|---|---|---|---|
-| **`TFS-13`** | Which `LLS-1` threshold applies to which period | (a) `LLS-1` (2025–2026 values) on the whole span · (b) per era: 2023–2024 its own per-session p90 pooled over its store; 2025-01 → 2026-07-02 keeps `LLS-1` · (c) per half-year per session p90, all seven half-years · (d) one per-session p90 pooled over 2023-01 → 2026-07-02 | **(b).** Step 1 of the `CLAUDE.md` three-step test: (c) is the more granular option. Step 3: (c) is not more truthful — its premise (USD drift with price) is **falsified by the measurement** (pooled p90 58,630 vs 60,000), and its cells swing 2–4× with no price order, so a half-year p90 writes local noise into the event definition. It also re-defines the registered 2025–2026 events. (a) ignores the `TFS-12` instruction to re-derive, and puts LONDON's bar above the 2023–2024 LONDON p90. (d) replaces the ruled `LLS-1` study values and is not "per period" | Pending harness 6 |
-| **`TFS-14`** | How the two stores join | (a) one continuous pass across the seam, after a `TradeSeq` seam check (stop on a gap) · (b) two independent passes, state reset at 2025-01-01 | **(a).** It keeps the 500-trade window and the de-clustering truthful across midnight 2024-12-31; (b) would invent an onset at the seam if a cluster spans it. The seam check guarantees no trade is missing or doubled | Pending harness 6 |
+| **`TFS-13`** | Which `LLS-1` threshold applies to which period | (a) `LLS-1` (2025–2026 values) on the whole span · (b) per era: 2023–2024 its own per-session p90 pooled over its store; 2025-01 → 2026-07-02 keeps `LLS-1` · (c) per half-year per session p90, all seven half-years · (d) one per-session p90 pooled over 2023-01 → 2026-07-02 | **(b).** Step 1 of the `CLAUDE.md` three-step test: (c) is the more granular option. Step 3: (c) is not more truthful — its premise (USD drift with price) is **falsified by the measurement** (pooled p90 58,630 vs 60,000), and its cells swing 2–4× with no price order, so a half-year p90 writes local noise into the event definition. It also re-defines the registered 2025–2026 events. (a) ignores the `TFS-12` instruction to re-derive, and puts LONDON's bar above the 2023–2024 LONDON p90. (d) replaces the ruled `LLS-1` study values and is not "per period" | My label `richer_option_wrong` · Jev `richer_option_wrong` (5/5, mean p 0.98). **Auto-proceeded** |
+| **`TFS-14`** | How the two stores join | (a) one continuous pass across the seam, after a `TradeSeq` seam check (stop on a gap) · (b) two independent passes, state reset at 2025-01-01 | **(a).** It keeps the 500-trade window and the de-clustering truthful across midnight 2024-12-31; (b) would invent an onset at the seam if a cluster spans it. The seam check guarantees no trade is missing or doubled | My label `no_richer_option` · Jev `richer_option_wrong` (5/5, 0.95). Neither says economy. **Auto-proceeded** |
+| **`TFS-15`** (written after the counts) | Session 2 runs although CONFIRMED is out of reach (half H1 FLIP 71; 171 < 200, so no split gives two readable halves) | (a) run session 2 as registered; the best attainable label is a full-span finding, halves descriptive · (b) extend further back (2020–2022) before any outcome, to reach 200 FLIP · (c) re-define the halves (e.g. split by FLIP events, not event days) before any outcome | **(a).** All three Holm tests are readable on the full span. (b) is **forbidden by a prior ruling**: `TFS-12` scoped the extension to 2023–2024 because 2020–2022 is a different regime. (c) **cannot work** (171 split any way leaves one half under 100) and would change a registered rule after seeing counts. Step 3 of the three-step test: no trade exists | My label `richer_option_wrong` · Jev `richer_option_wrong` (5/5, 0.99). **Auto-proceeded.** ⚠ The trader may still prefer to know this before session 2 starts |
+
+No choice here touches `settings.json`, scoring, a rendered value or a CSV schema. Harness-6 files: `docs/harness-runs/decision-bias-20261006T0908Z-{population,baseline,jev}.json` (`TFS-13`, `TFS-14`, state `f9d0fb8`) and `docs/harness-runs/decision-bias-20261006T0935Z-{population,baseline,jev}.json` (`TFS-15`, state `95c5f15`). My labels were written first in each run (shadow-mode rule). No economy flag, no unstable item.
+
+### 14.8 Harness log
+
+| Harness | Use | Result |
+|---|---|---|
+| 6 · decision-bias tripwire | `TFS-13`, `TFS-14` (10 calls) | No `gives_up_for_economy`. `TFS-13` agrees with my label. `TFS-14`: Jev `richer_option_wrong`, mine `no_richer_option`; both say nothing is given up |
+| 6 · decision-bias tripwire | `TFS-15` (5 calls) | Agrees: `richer_option_wrong` (5/5, 0.99) |
+| 5 · doc re-ranker | Not fired. The brief named every source document; there was no "where was this decided?" question | — |
+
+### 14.9 Pre-registration record — what this seat saw
+
+- **No outcome was computed or read.** No forward price move, return, EV or win rate was computed for any event or control row.
+- **No `Price` value was converted or printed.** Store reads used `awk` to print `Timestamp` and `TradeSeq` only, plus the header line. `derive.py` converts `Amount` only. `seam_check` splits the seam lines but uses columns 0 and 6 only.
+- **Order of work, by commit:** the threshold rule and `TFS-13` were committed at `f9d0fb8`, before the tool was changed. The tool was committed at `95c5f15`, before its first extended-span run. The extended counts were first seen after that run.
+- **Nothing was changed after the counts were seen.** `TFS-15` records a consequence of the counts; it changes no rule.
+- **No data at or after the fence was read** by this seat's tools. The month-seam check reads the first line of `trades_2026-07.csv` (2026-07-01) and no later line of that file.
+- **Read for this work:** `docs/liq-tradeflow-flip-study-spec.md` (all), `tools/ops/liq_tradeflow_counts.py` (all), `tools/ops/a4_liq_ofi_counts.py` lines 40–210, `docs/large-liq-size-rederivation-2026-10-02.md` (all), its `derive.py` (all) and `output.txt` (`D-5` block), the 2023–2024 store's `status_final.txt`, tracked `settings.json` (pins only), the harness-6 runner header.
+
+### 14.10 What I did not verify
+
+| Claim | Status |
+|---|---|
+| The engine replay (`TFS-8` (d)) can place levels on 2023–2024 tape | Not checked. Fixture `A94f` (`verify/ordercheck/Program.vb`) shows the replay loader reads an eleven-column store file; whether a full replay runs on trade-only history is open |
+| BTC price levels per era | General market knowledge, not read from the store |
+| σ and the ×2.45 ATR scale for 2023–2024 | Carried; not measured |
+| History-host liquidation flags are complete in 2023–2024 | Spot-verified in samples by an earlier seat (carried). The flag counts here (2023–2024: `T` 83,009, `M` 15,081, `MT` 11) are plausible against 2025–2026, not proven complete |
+| The 2023–2024 store files are unchanged since the counts run | Pinned by bytes and trade count, not by md5 |
+| `TradeSeq` is contiguous inside each month file | Not checked by this seat; carried from the backfill's deep status (0 missing) |
+| The `MT` reading of `D-5` | Untested against the venue (as session 1) |
