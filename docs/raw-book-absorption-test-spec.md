@@ -12,6 +12,13 @@
 
 ## 0. Session-2 brief — the read
 
+> ✅ **RULED 2026-10-06 (trader), superseding the all-or-nothing bar in the box below: option (d) QUARANTINE, read today.**
+> - **Correction first:** the bar "a verdict only if all mismatches are shown to be artefacts" was the orchestrator's wording, carried from this spec's escalation trigger; the trader had ruled only "let the run finish and diagnose before any verdict".
+> - **Rule, fixed before any `pullFrac` value is read:** drop every A–B episode PAIR in which EITHER arm's episode (`open_ms`–`close_ms`) overlaps any of the 28 quarantine windows in [`audits/proofs/raw-book-quarantine-2026-10-06/mismatch_windows.csv`](audits/proofs/raw-book-quarantine-2026-10-06/mismatch_windows.csv) (the one-minute status windows holding all 29 prior mismatches). Run the registered read (`RBA-3` pairing, `RBA-4` thresholds) once on the remaining pairs. Report the dropped count per arm and per session.
+> - **Why this is safe:** 0 of 156,319 exact checks mismatched, so no rebuild error persisted; the mismatches can only touch episodes inside those windows (measured exposure, timestamps only: arm A 89 of 3,565 episodes, arm B 164 of 6,874, ≈ 2.5 %).
+> - **Still owed for any future run:** the reconnect-reset fix and per-mismatch logging (this spec's `raw-book-absorption-test-spec.md` §11.4 and §11.6 (a)).
+
+
 > ⚠ **ESCALATION TRIGGER FIRED DURING THE RUN — RULED 2026-10-06 (trader): let the run finish, and diagnose before any verdict.**
 > - At 19.3 h the status read `agree 123633/0 prior 85237/20`: **0 exact mismatches, 20 "prior" mismatches**. 15 of the 20 fell in the first 4 h (2026-10-05 13:20 → 17:20 UTC, the LONDON/NY overlap); 5 in the next 15 h. Not aligned with the one reconnect (15:29 UTC).
 > - **Session 2 starts with the diagnosis, not the read.** For each prior mismatch, decide: a timing artefact of the "prior" fallback comparison (no raw message carries the snapshot's `change_id`), or a rebuild error. Show the evidence per mismatch.
