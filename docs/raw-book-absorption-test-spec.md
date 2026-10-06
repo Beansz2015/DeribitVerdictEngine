@@ -10,6 +10,12 @@
 
 ## 0. Session-2 brief — the read
 
+> ⚠ **ESCALATION TRIGGER FIRED DURING THE RUN — RULED 2026-10-06 (trader): let the run finish, and diagnose before any verdict.**
+> - At 19.3 h the status read `agree 123633/0 prior 85237/20`: **0 exact mismatches, 20 "prior" mismatches**. 15 of the 20 fell in the first 4 h (2026-10-05 13:20 → 17:20 UTC, the LONDON/NY overlap); 5 in the next 15 h. Not aligned with the one reconnect (15:29 UTC).
+> - **Session 2 starts with the diagnosis, not the read.** For each prior mismatch, decide: a timing artefact of the "prior" fallback comparison (no raw message carries the snapshot's `change_id`), or a rebuild error. Show the evidence per mismatch.
+> - **A verdict is allowed only if all 20 are shown to be fallback-comparison artefacts.** Any rebuild error, or any mismatch left unexplained, means no verdict: report and stop.
+> - Orchestrator's hypothesis, NOT verified: timing artefacts, because exact comparisons never mismatched.
+
 **Model: Opus 5.5 · Effort: HIGH.**
 
 - **Why that tier.** The read rule below is mechanical, but two judgments are not: (1) whether the aligned-pair population is representative (the raw arm can fragment episodes, and the aligned set can then select the stable ones); (2) which of the three explanations a result supports (netting, trade-timing misalignment, mask effects). Arm C exists to separate the second; reading it needs care.

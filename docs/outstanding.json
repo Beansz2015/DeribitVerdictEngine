@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-06T09:00Z",
+  "updated_utc": "2026-10-06T09:10Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -11,11 +11,6 @@
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
-    },
-    {
-      "kind": "go",
-      "meaning": "Raw-book probe escalation: 20 of 85,237 'prior' book comparisons mismatch (most in the first 6 h; 0 of 123,633 exact ones). Let the run finish and diagnose before any verdict (orchestrator read), or stop now?",
-      "since": "2026-10-06"
     }
   ],
   "in_progress": [
@@ -28,7 +23,7 @@
       "anchor": "§5 deploy ledger"
     },
     {
-      "what": "Raw order-book absorption probe, 24 h run (ends 2026-10-06 13:20 UTC) — ⚠ its escalation trigger fired: 20 \"prior\" book mismatches (0 exact mismatches); no verdict until diagnosed",
+      "what": "Raw order-book absorption probe, 24 h run (ends 2026-10-06 13:20 UTC). Ruled: let it finish; diagnose the 20 prior book mismatches before any verdict",
       "where": "AWS i-0b17cf2c2eb67496e (temporary)",
       "started_utc": "2026-10-05T13:20Z",
       "check": "tools/ops/rawbook/ssm-rawbook-status.json via aws ssm send-command"
