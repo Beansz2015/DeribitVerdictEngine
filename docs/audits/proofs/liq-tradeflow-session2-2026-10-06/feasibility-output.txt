@@ -1,0 +1,20 @@
+H-3: sections 1-6 of the re-run vs the H-4 block (docs/liq-tradeflow-flip-study-spec.md section 14.4): 152 vs 152 lines: PASS (identical)
+H-3 (information): the whole block incl. header, section 0 and section 7: 192 vs 192 lines: identical
+phase B: trades read 20318491 (fence stop: no); candles 1m 260640 3m 86880 5m 52128; empty buckets filled flat 1m 3821 3m 129 5m 57
+candles 1m: venue 214560  matched 214560  venue bar with no tape bar 0  tape bars in range 214560  OHLC identical 210229 (0.980)  close identical 213390 (0.995)
+  |diff| bps of close: high p50/p99/max 0.000/0.000/133.971  low 0.000/0.000/160.728  close 0.000/0.000/54.817  volume ratio tape/venue p1/p50/p99 1.000/1.000/1.000
+candles 3m: venue 71520  matched 71520  venue bar with no tape bar 0  tape bars in range 71520  OHLC identical 69512 (0.972)  close identical 71141 (0.995)
+  |diff| bps of close: high p50/p99/max 0.000/0.068/108.851  low 0.000/0.454/139.088  close 0.000/0.000/54.817  volume ratio tape/venue p1/p50/p99 1.000/1.000/1.000
+candles 5m: venue 42912  matched 42912  venue bar with no tape bar 0  tape bars in range 42912  OHLC identical 41545 (0.968)  close identical 42658 (0.994)
+  |diff| bps of close: high p50/p99/max 0.000/0.263/100.881  low 0.000/0.659/139.181  close 0.000/0.000/40.341  volume ratio tape/venue p1/p50/p99 1.000/1.000/1.000
+levels at 15-min instants x 2 sides: 28608  placed by both 28608  skipped (a source failed the candle gate) 0
+  same target reason 28026 (0.980)  same stop reason 28496 (0.996)  both same 27928 (0.976)
+  |target tape - venue| bps p50/p90/p99/max 0.00/0.03/12.58/156.67   |stop| p50/p90/p99/max 0.00/0.14/2.64/32.15
+  share |target diff| <= 0.5 bps 0.950   share |stop diff| <= 0.5 bps 0.961   ATR tape/venue p1/p50/p99 1.000/1.000/1.184
+  target reason cross-tab (tape / venue): tape FALLBACK_ATR / venue FALLBACK_ATR=7802  tape NEAREST_HVN_BELOW / venue NEAREST_HVN_BELOW=5245  tape NEAREST_HVN_ABOVE / venue NEAREST_HVN_ABOVE=5130  tape SWING_HIGH_5M / venue SWING_HIGH_5M=4806  tape SWING_LOW_5M / venue SWING_LOW_5M=4652  tape POC / venue POC=391  tape FALLBACK_ATR / venue NEAREST_HVN_ABOVE=94  tape NEAREST_HVN_ABOVE / venue FALLBACK_ATR=91  tape FALLBACK_ATR / venue NEAREST_HVN_BELOW=84  tape NEAREST_HVN_BELOW / venue FALLBACK_ATR=73  tape SWING_HIGH_5M / venue NEAREST_HVN_ABOVE=38  tape SWING_LOW_5M / venue NEAREST_HVN_BELOW=33  tape SWING_LOW_5M / venue FALLBACK_ATR=28  tape SWING_HIGH_5M / venue FALLBACK_ATR=25  tape NEAREST_HVN_ABOVE / venue POC=15  tape POC / venue FALLBACK_ATR=15  tape FALLBACK_ATR / venue POC=14  tape FALLBACK_ATR / venue SWING_LOW_5M=13  tape NEAREST_HVN_ABOVE / venue SWING_HIGH_5M=11  tape POC / venue NEAREST_HVN_BELOW=10  tape POC / venue NEAREST_HVN_ABOVE=10  tape NEAREST_HVN_BELOW / venue POC=9  tape NEAREST_HVN_BELOW / venue SWING_LOW_5M=8  tape FALLBACK_ATR / venue SWING_HIGH_5M=7  tape POC / venue SWING_HIGH_5M=2  tape SWING_LOW_5M / venue POC=1  tape POC / venue SWING_LOW_5M=1
+levels at the event decision instants D (hour at T0, the traded side): 116  placed by both 116  skipped (a source failed the candle gate) 0
+  same target reason 115 (0.991)  same stop reason 116 (1.000)  both same 115 (0.991)
+  |target tape - venue| bps p50/p90/p99/max 0.00/0.05/17.51/25.47   |stop| p50/p90/p99/max 0.00/0.22/1.18/2.81
+  share |target diff| <= 0.5 bps 0.940   share |stop diff| <= 0.5 bps 0.948   ATR tape/venue p1/p50/p99 0.998/1.000/1.124
+  target reason cross-tab (tape / venue): tape NEAREST_HVN_ABOVE / venue NEAREST_HVN_ABOVE=56  tape FALLBACK_ATR / venue FALLBACK_ATR=22  tape NEAREST_HVN_BELOW / venue NEAREST_HVN_BELOW=22  tape SWING_HIGH_5M / venue SWING_HIGH_5M=10  tape SWING_LOW_5M / venue SWING_LOW_5M=4  tape NEAREST_HVN_BELOW / venue SWING_LOW_5M=1  tape POC / venue POC=1
+

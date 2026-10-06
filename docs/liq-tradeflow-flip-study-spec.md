@@ -850,3 +850,64 @@ No choice here touches `settings.json`, scoring, a rendered value or a CSV schem
 | The 2023–2024 store files are unchanged since the counts run | Pinned by bytes and trade count, not by md5 |
 | `TradeSeq` is contiguous inside each month file | Not checked by this seat; carried from the backfill's deep status (0 missing) |
 | The `MT` reading of `D-5` | Untested against the venue (as session 1) |
+
+---
+
+## 15. Session 2, part (a): tools, `H-3` and the `TFS-8` (d) feasibility verdict — written 2026-10-06, BEFORE any outcome
+
+**Start commit:** `846a5b8`. **No outcome has been computed, printed or looked at when this section was written.** Prices were opened only for the candle and level comparison below (prices before each instant; no forward move).
+
+### 15.1 Tools
+
+| Tool | Role |
+|---|---|
+| `tools/ops/liq_tradeflow_read.py` | The outcome script. Phase A imports `run_pass` / `analyse` / `report` from `tools/ops/liq_tradeflow_counts.py` (not re-implemented) and is the `H-3` gate. Phase B builds candles and finds entry trades. Phase L calls the level tool. Phase C walks the trades. Phase S runs the registered statistics |
+| `tools/ops/TradeflowLevels/` (VB, links the shipped `Core/`) | Replays the engine's placed levels at D: `CalcATR`, `CalcSwingPivots`, `CalcVPFRLite`, `ExecutionResolution.ResolveResolution`, `SignalEmitter.ComputeSideLevels`. Also computes the spec section 4.8 ATR-fallback geometry (arm c) |
+| Copied statistics | `boot`, `label`, `rw_run`, `arm_rw`, `boot_p`, `holm`, `finalize_label` from `tools/ops/burst_outcome_read.py`. One change: the suffix reads "THRESHOLD-SENSITIVE" (spec section 4.4), and the seam arm is removed |
+
+### 15.2 Handles and evidence
+
+| Handle | Command (repo root) | Result 2026-10-06 |
+|---|---|---|
+| `H-3` | `python tools/ops/liq_tradeflow_read.py --h3` | **PASS.** Sections 1–6: 152 of 152 lines identical to the `H-4` block (`docs/liq-tradeflow-flip-study-spec.md` §14.4). The whole block, header and sections 0 and 7 included: 192 of 192 identical. Runtime 321 s. Output: `docs/audits/proofs/liq-tradeflow-session2-2026-10-06/h3-output.txt` |
+| `H-7` | `python tools/ops/liq_tradeflow_read.py --selftest` | `SELFTEST PASS (0 failure(s))`, 33 checks |
+| `H-8` | `dotnet build tools/ops/TradeflowLevels/TradeflowLevels.vbproj -c Release`, then `dotnet tools/ops/TradeflowLevels/bin/Release/net8.0/TradeflowLevels.dll selftest --settings <a copy of settings.json>` | `SELFTEST PASS (0 failure(s))`, 14 checks |
+| `H-9` | `python tools/ops/liq_tradeflow_read.py --feasibility --workdir <dir>` | The block in `docs/audits/proofs/liq-tradeflow-session2-2026-10-06/feasibility-output.txt`. Needs `backtest_data/candles_*m_2026-0[1-6].csv` (gitignored, local) |
+| `E-4` (evidence) | 12 one-line mutants of `liq_tradeflow_read.py` in scratch copies, each run with `--selftest` | **All 12 red:** fade side swapped · TFI30 entry = the 30th trade · a trade at the window end counted · timeout mark = the closing trade · breakeven = mean of per-row rates · SHORT stop mirrored wrong · hour at D, not T0 · `arm_rw` not negated · outcome fence removed · empty buckets not filled · timeout mark unsigned · time entry `>` not `>=` |
+
+### 15.3 Feasibility verdict on `TFS-8` (d): **REPLAYABLE. No fallback to (c).**
+
+- **Inputs.** `SignalEmitter.ComputeSideLevels` with `structural_levels.enabled` reads only `r` and `cfg` (the code comment says "verdict-independent"). The `r` fields it reads are `CurrentPrice`, `ATR`, `SessionUtcHour`, the four `Swing*` fields, `BestPivotByVolume5m`, `VPFRNearestHvnAbove/Below`, `VPFRPoc` and `VPFRSignal`. All come from exec-resolution and 5m candles. **None needs funding, open interest or the order book.** So the "input the store does not hold" escalation does not apply.
+- **Why not `ReplayLoop.Run` itself.** It loads venue candles and funding from `backtest_data/`, which holds 2026-01 → 2026-09 only. It cannot run on 2023–2025. The level tool calls the same shipped functions with candles built from the history store's trade prices.
+- **Faithfulness, measured** (2026-02-02 → 2026-06-30, tape candles vs the venue's chart candles in `backtest_data/`):
+
+| Check | Result |
+|---|---|
+| 1m candles | 214,560 of 214,560 matched; OHLC identical 98.0 %; close identical 99.5 %; volume ratio p1/p50/p99 1.000 |
+| 3m / 5m candles | OHLC identical 97.2 % / 96.8 %; volume ratio 1.000 |
+| Levels on a 15-min grid, both sides (28,608) | Same target reason 98.0 %, same stop reason 99.6 %. \|Δ target\| p50/p90/p99 0.00/0.03/12.6 bps; \|Δ stop\| 0.00/0.14/2.6 bps. ATR ratio p50 1.000, p99 1.18 |
+| Levels at the 116 real event decision instants D in that span | Same target reason 99.1 %, same stop reason 100 %. \|Δ target\| p90 0.05 bps, p99 17.5 bps; \|Δ stop\| p99 1.2 bps |
+
+- A few venue bars carry a different high or low (max 134–161 bps). I did not find out why. It moves about 2 % of target labels.
+
+### 15.4 How the replay maps onto the engine (stated before any outcome)
+
+| Item | Rule | Why |
+|---|---|---|
+| Candles | Built from every store trade. 1m from trades; 3m and 5m folded from the 1m candles that hold trades (the same as aggregating the trades). An empty bucket = flat at the previous close, volume 0 (`ReplayLoop.BuildFormingStub` zero-trade convention). Volume = Σ Amount ÷ Price | `ReplayLoop.BuildFormingStub` units |
+| Bars used at D | **Completed bars only** (open + resolution ≤ D): the last 250 exec bars and the last 210 5m bars | `ReplayLoop` `useFormingStub:=False` arm. The shipped forming stub (trades in [close, close + 2 s]) has no meaning at an instant that is not a bar close. Spec section 4.8 already reads "completed" |
+| Skip gate | `ReplayLoop`'s: 1m < 50, 5m < 30, or exec < 50 completed bars → dropped as "few_candles" | Named drop (spec section 7 item 4) |
+| `CurrentPrice` | The entry trade's price | Live places levels around the price at the run; the trade enters here |
+| Exec resolution, fallback multiplier, window | By the session at T0 (control: at g) | Spec section 4.8 |
+| Arm d (primary) | `ComputeSideLevels` target and stop; house net EV | `TFS-8` (d), ruled |
+| Arm c (descriptive) | ATR(7) over the last 50 completed exec bars; target ×1.75 NY, ×2.0 LONDON, ×1.25 ASIA; stop ×1.6 | Spec section 4.8 |
+| Step 5c min-move gate | **Not applied.** The share of rows whose placed target is below the floor (8 bps) is printed | It acts on a verdict. These rows are not engine verdicts, and the gate places no level |
+| `TFS-H3` ATR tercile | The arm-d engine ATR in USD, per session, edges from control rows. Rows sort ≤ lo, ≤ hi, else top | The house unit, as the burst read's ATR fifths |
+| Halves | The registered split: H1 2023-01-08 → 2024-09-30, H2 from 2024-10-01. Control rows go by date | Spec section 4.9; `H-4` |
+| Labels | The census label (copied `label`) plus a separate "Full-span Holm" column: passed = the Holm step-down had not stopped and the Holm-adjusted FULL CI excludes 0 | `TFS-15`: the best attainable result is a full-span finding. The census rule has no label string for it |
+
+### 15.5 What each arm loses vs the live engine
+
+- **All arms:** no forming bar (completed bars only); levels at D, not at a bar close; tape candles in place of venue candles (agreement above).
+- **Arm d only:** nothing else. Funding, OI and book feed no placed level.
+- **Arm c:** unchanged from spec section 4.8.

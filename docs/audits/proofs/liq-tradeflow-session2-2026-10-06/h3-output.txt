@@ -1,0 +1,4 @@
+H-3: sections 1-6 of the re-run vs the H-4 block (docs/liq-tradeflow-flip-study-spec.md section 14.4): 152 vs 152 lines: PASS (identical)
+H-3 (information): the whole block incl. header, section 0 and section 7: 192 vs 192 lines: identical
+rows: event-variant rows 4905 (primary 984), control rows 201040
+runtime 321 s

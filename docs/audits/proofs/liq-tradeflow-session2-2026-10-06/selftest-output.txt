@@ -1,0 +1,44 @@
+SELFTEST: candles (phase B)
+  1m: minute 0 OHLC                                                          PASS  got=[1741010400000.0, 10.0, 12.0, 9.0, 11.0] want=[1741010400000, 10.0, 12.0, 9.0, 11.0]
+  1m: minute 0 volume = sum(amount / price) BTC                              PASS  got=38.535353535 want=38.535353535
+  1m: minute 1 (no trade) is flat at the previous close, volume 0            PASS  got=[11.0, 11.0, 11.0, 11.0, 0.0] want=[11.0, 11.0, 11.0, 11.0, 0.0]
+  1m: candle count (minutes 0..4)                                            PASS  got=5 want=5
+  3m: bucket 0 folds minutes 0 and 2 (O 10 H 20 L 9 C 20)                    PASS  got=[1741010400000.0, 10.0, 20.0, 9.0, 20.0] want=[1741010400000, 10.0, 20.0, 9.0, 20.0]
+  3m: bucket 1 opens at the first TRADE (30), not the flat minute 3          PASS  got=[1741010580000.0, 30.0, 30.0, 29.0, 29.0] want=[1741010580000, 30.0, 30.0, 29.0, 29.0]
+  5m: one bucket, O 10 H 30 L 9 C 29                                         PASS  got=[1741010400000.0, 10.0, 30.0, 9.0, 29.0] want=[1741010400000, 10.0, 30.0, 9.0, 29.0]
+SELFTEST: entries (phase B)
+  time rule: entry = first trade with ts >= D (ordinal 5, px 105)            PASS  got=(5, 1741010405000, 105.0) want=(5, 1741010405000, 105.0)
+  TFI30: entry = the trade after the 30th (ordinal 4)                        PASS  got=4 want=4
+  control: entry = first trade >= g + 60 s analogue (t0+8s, ordinal 9)       PASS  got=(9, 1741010408000) want=(9, 1741010408000)
+  an entry that is not the first trade >= D is a STOP                        PASS  got='stop' want='stop'
+SELFTEST: the walk (phase C)
+  long: target 101.0 reached at ordinal 3 -> success                         PASS  got=('success', 1741010403000) want=('success', 1741010403000)
+  long: stop 99.0 reached first -> stop                                      PASS  got='stop' want='stop'
+  short: target 99.0 BELOW entry reached -> success                          PASS  got='success' want='success'
+  timeout: a trade exactly AT the window end is outside it; mark = 100.1     PASS  got=('timeout', 100.1, 2) want=('timeout', 100.1, 2)
+  no trade after the entry inside the window -> drop                         PASS  got='no_trade_in_window' want='no_trade_in_window'
+  short: price >= stop -> stop                                               PASS  got='stop' want='stop'
+SELFTEST: house net EV and the Sigma breakevens
+  success: +target bps - fee (target 101 from 100 = 100 bps)                 PASS  got=97.0 want=97.0
+  stop: -stop bps - fee (99 from 101)                                        PASS  got=-201.01980198 want=-201.01980198
+  timeout: mark - fee, signed for a LONG                                     PASS  got=-12.98003992 want=-12.98003992
+  timeout: mark signed for a SHORT (price fell 50 bps -> +50 - fee)          PASS  got=47.0 want=47.0
+  gross breakeven = Sigma stop / Sigma (target + stop) = 20/60               PASS  got=33.333333333 want=33.333333333
+  net breakeven = Sigma (stop + fee) / Sigma (target + stop) = 26/60         PASS  got=43.333333333 want=43.333333333
+SELFTEST: sides, rows and the session at T0
+  event LONG (long liquidations, cascade down) is traded LONG (the fade)     PASS  got=True want=True
+  event SHORT is traded SHORT; control SHORT (I < lo) trades SHORT with the flow PASS  got=False want=False
+  row hour = the hour at T0 (12, LONDON), not at D (13, NY)                  PASS  got=(12, 'LONDON') want=(12, 'LONDON')
+  time variant: entry ordinal = the closing trade's ordinal (77)             PASS  got=77 want=77
+  TFI30: entry ordinal = 30th trade's ordinal + 1 (78)                       PASS  got=78 want=78
+  control rows: only an outer tercile with the outcome window before the fence PASS  got=['SHORT'] want=['SHORT']
+  a walk whose window ends at or after the fence is dropped (outcome fence)  PASS  got=(0, 'outcome_window_crosses_fence') want=(0, 'outcome_window_crosses_fence')
+SELFTEST: re-weighting, the test shapes, Holm
+  arm_rw: A - B with B re-weighted to A's strata = 10 - 0 = +10 (raw would be -40) PASS  got=10.0 want=10.0
+  arm_rw: counts are [A, B] in covered strata                                PASS  got=[400, 400] want=[400, 400]
+  arm_rw: CONFIRMED (d > 0) on a constant +10 in both halves                 PASS  got='CONFIRMED (d > 0)' want='CONFIRMED (d > 0)'
+  mean test: FULL point = +10, label CONFIRMED                               PASS  got=(10.0, 'CONFIRMED (d > 0)') want=(10.0, 'CONFIRMED (d > 0)')
+  mean test: half H2 holds 50 rows (< 100) -> no CONFIRMED                   PASS  got='H1 FINDING, H2 CONTRADICTS OR NOT READABLE (d > 0)' want='H1 FINDING, H2 CONTRADICTS OR NOT READABLE (d > 0)'
+  Holm: the two constant effects pass, the zero-mean one does not            PASS  got=(True, True, False) want=(True, True, False)
+  finalize_label: a trailing point of the other sign adds THRESHOLD-SENSITIVE PASS  got='CONFIRMED (d > 0) THRESHOLD-SENSITIVE' want='CONFIRMED (d > 0) THRESHOLD-SENSITIVE'
+SELFTEST PASS (0 failure(s))

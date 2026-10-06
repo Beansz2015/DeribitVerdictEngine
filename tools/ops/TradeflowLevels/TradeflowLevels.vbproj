@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- tools/ops/TradeflowLevels — the placed-level replay for the liquidation x trade-flow flip study, session 2
+       (docs/liq-tradeflow-flip-study-spec.md, ruling TFS-8 (d)). Read-only: it reads candle CSVs built from the history
+       store by tools/ops/liq_tradeflow_read.py, a row file, and a COPY of settings.json, and writes one CSV.
+       It links the SHIPPED Core: IndicatorEngine.CalcATR / CalcSwingPivots / CalcVPFRLite,
+       ExecutionResolution.ResolveResolution and SignalEmitter.ComputeSideLevels. Host-agnostic, no WinForms.
+       Compile list = tools/ops/SwingFallbackRead/SwingFallbackRead.vbproj's (known to build together). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>TradeflowLevels</AssemblyName>
+    <Nullable>enable</Nullable>
+    <StartupObject>DeribitVerdictEngine.TradeflowLevelsProgram</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\..\Core\Settings\SettingsLoader.vb" />
+    <Compile Include="..\..\..\Core\ExecutionResolution.vb" />
+    <Compile Include="..\..\..\Core\IndicatorResults.vb" />
+    <Compile Include="..\..\..\Core\Indicators_Momentum.vb" />
+    <Compile Include="..\..\..\Core\LevelAbsorptionTracker.vb" />
+    <Compile Include="..\..\..\Core\Indicators_OrderFlow.vb" />
+    <Compile Include="..\..\..\Core\Indicators_Structure.vb" />
+    <Compile Include="..\..\..\Core\Indicators_Volatility.vb" />
+    <Compile Include="..\..\..\Core\ScoringEngine_Types.vb" />
+    <Compile Include="..\..\..\Core\ScoringEngine_Helpers.vb" />
+    <Compile Include="..\..\..\Core\ScoringEngine_Calculate_Scoring.vb" />
+    <Compile Include="..\..\..\Core\ScoringEngine_Calculate_Verdict.vb" />
+    <Compile Include="..\..\..\Core\SignalEmitter.vb" />
+    <Compile Include="..\..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\..\Core\VenueStatusLog.vb" />
+    <Compile Include="..\..\..\Core\RunErrorLog.vb" />
+    <Compile Include="..\..\..\DeribitClient.vb" />
+    <Compile Include="..\..\..\DynamicNorms.vb" />
+    <Compile Include="..\..\..\analysis\AnalysisConstants.vb" />
+    <Compile Include="..\..\..\analysis\AnalysisReport.vb" />
+    <Compile Include="..\..\..\analysis\ForwardWindowJoiner.vb" />
+    <Compile Include="..\..\..\analysis\FailureRateMatrix.vb" />
+    <Compile Include="..\..\..\analysis\DeribitOhlcFetcher.vb" />
+    <Compile Include="..\..\..\analysis\BandLadder.vb" />
+  </ItemGroup>
+
+</Project>
