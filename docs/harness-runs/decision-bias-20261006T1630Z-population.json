@@ -1,0 +1,38 @@
+{
+ "rev": "ad47bd57c27c42d4a896ec133d3cf6d065a0592f",
+ "rev7": "ad47bd5",
+ "stamp_utc": "20261006T1630Z",
+ "builder": "orchestrator seat",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/raw-book-absorption-test-results-2026-10-06.md|veto-tighten@ad47bd5",
+   "question": "The absorption pull veto (max_pull_frac 0.75) is fed by a 100 ms book fold that understates pullFrac; on the raw feed about 19.5 % of passing episodes would be vetoed. The trader has ruled to switch the engine to the raw-equivalent (gross) measure, built after a 7-week holiday. Should the veto threshold also be tightened?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "tighten the threshold now, on the current 100 ms measure",
+     "src": "docs/raw-book-absorption-test-results-2026-10-06.md"
+    },
+    {
+     "label": "(b)",
+     "text": "no threshold change now; the raw measure itself tightens the veto when it ships; then re-calibrate the threshold on raw-measured data against outcomes, pre-registered",
+     "src": "docs/raw-book-absorption-test-results-2026-10-06.md"
+    },
+    {
+     "label": "(c)",
+     "text": "both: tighten now and switch the measure later",
+     "src": "docs/raw-book-absorption-test-results-2026-10-06.md"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "0.75 was set against the biased 100 ms measure. Switching the measure already vetoes ~19.5 % more episodes. Tightening now tunes a threshold on a measure being retired, and (c) would double-tighten when the raw measure lands. Whether more vetoes improve outcomes is unmeasured; the threshold must be re-derived on the raw measure against outcomes.",
+   "question_src": "docs/raw-book-absorption-test-results-2026-10-06.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-test-results-2026-10-06.md"
+   ],
+   "state_rev": "ad47bd57c27c42d4a896ec133d3cf6d065a0592f",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

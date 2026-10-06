@@ -1,3 +1,10 @@
+> ✅ **RULED 2026-10-06 (trader), after the quarantined read:**
+> - **Measure: switch to the raw-equivalent (gross) flow.** The engine's absorption `pullLB`/`postLB` fold moves from the 100 ms book channel to a raw book rebuilt from `book.BTC-PERPETUAL.raw` (the probe's method), so within-bucket posts and pulls are no longer netted away.
+> - **The raw book subscription on the collector: agreed.** It needs authentication (the read-only key; credentials were ruled available for the collector on 2026-08-20).
+> - **Classification note (orchestrator, verified in `settings.json`):** absorption runs with `scoring_enabled: false`, so this changes NO live verdict today. It changes the TAPE-strip tag and the `Absorption*` CSV values, which makes it a reserved rendered-value change and a dataset boundary for those columns, and it feeds the future activation gates.
+> - **Threshold `max_pull_frac` (0.75): NOT tightened now** (orchestrator read; harness 6, no flag). The switch to the raw measure is itself the tightening (~19.5 % of passing episodes would veto). 0.75 was chosen on the 100 ms measure (v61). Re-derive it on raw-measured data inside the absorption activation calibration, against outcomes.
+> - **Build after 2026-11-25** (holiday freeze). Spec first. Build constraints to measure: CPU on the `t2.micro` collector (burstable credits) and memory (the Linux probe ran ~225 MB private, GC heap ~12 MB). Carry the probe's two open defects: the reconnect-reset gap and per-mismatch logging.
+
 # Raw order-book absorption test — results, 2026-10-06 (UTC)
 
 **Spec:** [`raw-book-absorption-test-spec.md`](raw-book-absorption-test-spec.md). Full diagnosis: `raw-book-absorption-test-spec.md` §11. Run: 24 h, 2026-10-05 13:20:38 → 2026-10-06 13:20:38 UTC, temporary AWS instance, data in `C:\DeribitData\rawbook-run1\out\`.

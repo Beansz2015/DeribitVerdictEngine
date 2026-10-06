@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-06T16:20Z",
+  "updated_utc": "2026-10-06T16:45Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -9,18 +9,13 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 24 commits ahead of origin: raw-book read (script + result), study records, pane updates (no engine code)",
+      "meaning": "Push master — 26 commits ahead of origin: raw-book result and rulings, study records, pane updates (no engine code)",
       "since": "2026-10-06"
     },
     {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
-    },
-    {
-      "kind": "ruling",
-      "meaning": "Absorption pull veto: the 100 ms feed nets posts and pulls, so it UNDERSTATES pullFrac (raw reads higher; ~20 % of episodes would flip pass→veto). Whether the engine should measure gross flow is a scoring decision — rule now, build after 2026-11-25?",
-      "since": "2026-10-06"
     }
   ],
   "in_progress": [
@@ -75,6 +70,12 @@
     }
   ],
   "next_up": [
+    {
+      "what": "Spec the switch of the absorption pull/post measure to a raw-rebuilt book on the collector (gross flow; reserved rendered-value + CSV-meaning change; measure collector CPU and memory). Spec before the holiday is allowed; build after 2026-11-25",
+      "doc": "docs/raw-book-absorption-test-results-2026-10-06.md",
+      "anchor": "RULED box at the top",
+      "model": "Opus 5.5, high"
+    },
     {
       "what": "Adversarial review of the indicator review pack, in a fresh seat — attack its order and classes",
       "doc": "docs/indicator-calibration-review-2026-10-02.md",
