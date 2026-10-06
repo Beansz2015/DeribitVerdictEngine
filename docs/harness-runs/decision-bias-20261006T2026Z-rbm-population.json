@@ -1,0 +1,337 @@
+{
+ "rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+ "rev7": "d0ed69d",
+ "stamp_utc": "20261006T2026Z",
+ "builder": "raw-book measure spec seat",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-1@d0ed69d",
+   "question": "The absorption pull/post measure moves to a raw-rebuilt order book (trader ruled). Feeding the existing tracker the raw book also changes episode boundaries and band depletion: measured on a 24 h probe, episodes nearly double, median life falls 1.33 s to 0.30 s, and the live ABSORB tag would show about 71 times a day instead of 162. What scope should the switch have?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "feed the whole existing tracker from the rebuilt top-10 book plus raw trades, exactly the configuration the probe measured; every absorption column changes",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "only the pull/post accumulators come from the raw stream; episode lifecycle and band size stay on the 100 ms book; needs a tracker code change and was never measured",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a) is the configuration the test measured and changes only the feed, not the tracker code. (b) has no measurement behind it. The drop in tag frequency is material and is shown to the trader.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-2@d0ed69d",
+   "question": "A raw order book subscription needs an authenticated WebSocket on a 1 GB production collector whose main connection captures the permanent trade tape. Which connection carries it?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "a second, separate authenticated connection used only for absorption (raw book, raw trades, 100 ms book for a correctness check)",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "authenticate the existing public connection and add the raw channels to it",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a) isolates the tape-capture connection from authentication and raw-channel faults, and keeps the probe's same-socket ordering of book and trades for the tracker.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-3@d0ed69d",
+   "question": "When the raw book is unavailable (no key, auth refused, connection down, waiting for a fresh snapshot), what does the absorption measure do? A shadow tracker on the 100 ms feed already writes its own separate CSV columns.",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "primary tracker idle, no live tag, a feed column in the CSV names the cause",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "silently fall back to the 100 ms measure in the same columns",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "fall back to the 100 ms measure in the same columns, with the feed column marking those rows",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The shadow columns already record the 100 ms values, so (c) adds no data. Falling back would make the single live strip tag mean two different measures with no visible marker.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-4@d0ed69d",
+   "question": "The switch changes the meaning of every Absorption column in analysis_log.csv. How is the dataset boundary handled?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "change the meaning in place with no header change; split on the SettingsVersion column only (an earlier precedent did this)",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "header rotation: existing Absorption columns become the raw measure; append a per-row feed column and five shadow columns carrying the old 100 ms measure from a tracker kept running",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "header rotation with the feed column only, no shadow columns",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "Each row says which measure it holds, and the paired old/new series spans more than the one day the probe covered, for the later threshold re-derivation.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-5@d0ed69d",
+   "question": "The collector checks the rebuilt book against the venue's 100 ms snapshot by change_id. In 24 h: 0 of 156,319 exact checks mismatched; 29 of about 103,000 fallback ('prior') comparisons mismatched, unexplained. What happens on a mismatch?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "exact mismatch: write a full record, resubscribe, reset; prior mismatch: write a full record only",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "counters only",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "no check",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "resubscribe and reset on prior mismatches too",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a) fixes the probe's counter-only defect. (d) would reset about 29 times a day on events most likely caused by venue coalescing, while the exact check already bounds any persistent rebuild error to about half a second.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-6@d0ed69d",
+   "question": "How much does each book-mismatch record keep, on a 1 GB box?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "the full diagnosis set (ids, both books, the raw changes between), from 512-entry rings, capped at 200 records a day and 8 MB a file",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "ids only",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "the full set, uncapped",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a) is the minimum set the earlier diagnosis said it lacked, with a byte cap that the box's memory and a standing size-cap rule require.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-7@d0ed69d",
+   "question": "Where is the read-only API credential stored on the Windows collector?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "a DPAPI-encrypted file bound to the auto-logon user, placed by an interactive setup tool over RDP",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "an access-restricted plain environment file, as the probe used",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "AWS SSM Parameter Store SecureString fetched at app start through the instance role, so no secret is on disk",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(d)",
+     "text": "Windows Credential Manager",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Encrypted at rest, bound to one account, no new startup dependency. (c) keeps no secret on disk but makes the feed's start depend on an AWS API call, on a code path where a hang before the request is unbounded.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-8@d0ed69d",
+   "question": "Which API key does the collector use?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "a new dedicated read-only key for the collector",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "reuse the research probe's key",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Separate revocation and audit; a standing rule forbids two authenticated sessions on the probe key at once, and the collector would hold one permanently.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-9@d0ed69d",
+   "question": "The recorded key-scope ruling still says the collector box is excluded; a later ruling agreed the raw subscription on the collector. What first?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "the trader updates the scope record to cover the collector and the test clones before any key goes on them",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "proceed on the later ruling's wording",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "It keeps the record true; the previous scope change was recorded the same way before its deploy.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-10@d0ed69d",
+   "question": "After a raw-feed-only reset (gap or reconnect of the absorption connection), what happens to the carried price levels the tracker watches?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "re-apply the last carried levels immediately, as the probe did",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "wait for the next analysis run to re-carry them",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "A raw-feed gap does not age the levels; waiting loses up to one run interval of measurement per reset.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-11@d0ed69d",
+   "question": "How is the book feed for absorption selected and rolled back?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "one settings.json key read at feed start (restart to change), rejected for the auto-tweaker; safety caps as public constants",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "a hot-reloadable settings key",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "a compile-time constant",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Rollback without a rebuild, and no mid-instance hot-reload edge on a credentialed connection; a hot-reload would change the measure inside one run identity, which is the unfilterable-edge class.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-12@d0ed69d",
+   "question": "Pre-registered pass/fail thresholds for the twin-clone resource gates (CPU delta <= 3 pp, mean < 10 %, credits >= 72, private bytes delta <= 25 MB, available >= 50 MB, eviction share +5 pp, collection cadence unchanged).",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "as written, before any gate data exists",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "other values",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Pre-registered before any gate data exists; open to the trader before the first gate.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

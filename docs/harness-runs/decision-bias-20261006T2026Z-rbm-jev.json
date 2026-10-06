@@ -1,0 +1,300 @@
+{
+    "rev":  "d0ed69da9fecca811d7e00f3613a27e66b6bdc13",
+    "population":  "docs/harness-runs/decision-bias-20261006T2026Z-rbm-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20261006T2026Z-rbm-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "jev_model":  "requested=[jev-latest x60] resolved=[jev-1.13.0 x60] run_utc=2026-10-06T20:28:03Z",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  60,
+    "usage_input_tokens":  44537,
+    "wall_time_sec":  17.58,
+    "items":  [
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-1@d0ed69d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  0.8,
+                      "stable":  false,
+                      "mean_top_probability":  0.38,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "gives_up_for_economy",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.39,
+                                                       0.37,
+                                                       0.42,
+                                                       0.35,
+                                                       0.37
+                                                   ],
+                      "usage_input_tokens":  4089,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-2@d0ed69d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.582,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.6,
+                                                       0.6,
+                                                       0.58,
+                                                       0.57,
+                                                       0.56
+                                                   ],
+                      "usage_input_tokens":  3623,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-3@d0ed69d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.956,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.94,
+                                                       0.96,
+                                                       0.96,
+                                                       0.96,
+                                                       0.96
+                                                   ],
+                      "usage_input_tokens":  3887,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-4@d0ed69d",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.64,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.58,
+                                                       0.62,
+                                                       0.68,
+                                                       0.64,
+                                                       0.68
+                                                   ],
+                      "usage_input_tokens":  3832,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-5@d0ed69d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.85,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.86,
+                                                       0.84,
+                                                       0.82,
+                                                       0.87,
+                                                       0.86
+                                                   ],
+                      "usage_input_tokens":  4094,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-6@d0ed69d",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.594,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.57,
+                                                       0.6,
+                                                       0.6,
+                                                       0.61,
+                                                       0.59
+                                                   ],
+                      "usage_input_tokens":  3643,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-7@d0ed69d",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.322,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.35,
+                                                       0.31,
+                                                       0.32,
+                                                       0.32,
+                                                       0.31
+                                                   ],
+                      "usage_input_tokens":  3931,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-8@d0ed69d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.942,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.94,
+                                                       0.96,
+                                                       0.93,
+                                                       0.95,
+                                                       0.93
+                                                   ],
+                      "usage_input_tokens":  3352,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-9@d0ed69d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.78,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.81,
+                                                       0.78,
+                                                       0.79,
+                                                       0.76,
+                                                       0.76
+                                                   ],
+                      "usage_input_tokens":  3454,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-10@d0ed69d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.564,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.63,
+                                                       0.52,
+                                                       0.59,
+                                                       0.52,
+                                                       0.56
+                                                   ],
+                      "usage_input_tokens":  3436,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-11@d0ed69d",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.968,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.97,
+                                                       0.96,
+                                                       0.97,
+                                                       0.97
+                                                   ],
+                      "usage_input_tokens":  3664,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/raw-book-absorption-measure-spec.md|RBM-12@d0ed69d",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.434,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.44,
+                                                       0.46,
+                                                       0.43,
+                                                       0.43,
+                                                       0.41
+                                                   ],
+                      "usage_input_tokens":  3532,
+                      "seat_label":  "no_richer_option"
+                  }
+              ]
+}
