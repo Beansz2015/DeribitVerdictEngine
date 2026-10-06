@@ -1,0 +1,56 @@
+STORE C:/DeribitData/history-2023-2024 | minute samples 1052639 | flags {'none': 67556793, 'T': 83009, 'M': 15081, 'MT': 11}
+  per-trade USD, flag T: n=83009 p50=3,980 p90=20,000 p99=56,609 max=800,000
+  per-trade USD, flag M: n=15081 p50=4,140 p90=34,300 p99=200,030 max=1,116,930
+  per-trade USD, flag MT: n=11 p50=12,880 p90=25,000 p99=64,870 max=69,300
+
+== booking CUR | minutes with any liq in window: 27689 (2.63 %) | signal fired: 27483 (2.61 %)
+  dominant size when fired (USD): p10=300 p25=2,000 p50=5,000 p75=15,110 p90=57,590 p95=148,180 p99=600,000 max=4,755,000
+  any-side size, minutes with liq (USD): p50=5,000 p90=58,630 p95=150,450
+  share of fired minutes ABOVE the shipped 200 (=> large penalty today): 91.67 %
+  p90 of dominant size by segment:
+    *       ASIA    n=   9242 p50=      6,700 p90=      60,426
+    *       LONDON  n=   5496 p50=      5,000 p90=      50,900
+    *       NY      n=  12745 p50=      5,000 p90=      57,666
+    2023H1  *       n=   3876 p50=      5,000 p90=      55,145
+    2023H1  ASIA    n=   1354 p50=     10,000 p90=      60,000
+    2023H1  LONDON  n=    871 p50=      5,000 p90=      27,300
+    2023H1  NY      n=   1651 p50=      5,000 p90=      69,100
+    2023H2  *       n=   5276 p50=      5,000 p90=      58,545
+    2023H2  ASIA    n=   1741 p50=      6,920 p90=      51,160
+    2023H2  LONDON  n=   1090 p50=      5,000 p90=      26,762
+    2023H2  NY      n=   2445 p50=      5,000 p90=     104,868
+    2024H1  *       n=   7540 p50=      5,000 p90=      85,519
+    2024H1  ASIA    n=   2559 p50=      6,380 p90=      65,030
+    2024H1  LONDON  n=   1620 p50=      5,000 p90=      86,120
+    2024H1  NY      n=   3361 p50=      5,000 p90=     105,000
+    2024H2  *       n=  10791 p50=      5,000 p90=      43,250
+    2024H2  ASIA    n=   3588 p50=      6,030 p90=      61,836
+    2024H2  LONDON  n=   1915 p50=      5,000 p90=      46,800
+    2024H2  NY      n=   5288 p50=      5,000 p90=      33,500
+  dominance: one-sided minutes 27087 (97.8 % of liq minutes); two-sided 602; ratio max/min p25=1.50 p50=3.79 p75=17.48 p90=51.17; two-sided minutes with ratio < 2.0: 201
+
+== booking D5 | minutes with any liq in window: 27689 (2.63 %) | signal fired: 27568 (2.62 %)
+  dominant size when fired (USD): p10=300 p25=2,000 p50=5,000 p75=15,200 p90=58,630 p95=150,000 p99=635,520 max=4,755,000
+  any-side size, minutes with liq (USD): p50=5,000 p90=58,000 p95=149,080
+  share of fired minutes ABOVE the shipped 200 (=> large penalty today): 91.70 %
+  p90 of dominant size by segment:
+    *       ASIA    n=   9259 p50=      6,920 p90=      61,060
+    *       LONDON  n=   5502 p50=      5,000 p90=      50,939
+    *       NY      n=  12807 p50=      5,000 p90=      58,630
+    2023H1  *       n=   3881 p50=      5,000 p90=      55,780
+    2023H1  ASIA    n=   1357 p50=     10,000 p90=      60,000
+    2023H1  LONDON  n=    871 p50=      5,000 p90=      27,300
+    2023H1  NY      n=   1653 p50=      5,000 p90=      69,100
+    2023H2  *       n=   5291 p50=      5,000 p90=      60,440
+    2023H2  ASIA    n=   1742 p50=      6,920 p90=      51,160
+    2023H2  LONDON  n=   1090 p50=      5,000 p90=      26,762
+    2023H2  NY      n=   2459 p50=      5,000 p90=     116,920
+    2024H1  *       n=   7586 p50=      5,000 p90=      91,990
+    2024H1  ASIA    n=   2566 p50=      6,380 p90=      65,030
+    2024H1  LONDON  n=   1625 p50=      5,000 p90=      86,120
+    2024H1  NY      n=   3395 p50=      5,000 p90=     111,260
+    2024H2  *       n=  10810 p50=      5,000 p90=      44,370
+    2024H2  ASIA    n=   3594 p50=      6,085 p90=      61,887
+    2024H2  LONDON  n=   1916 p50=      5,000 p90=      47,095
+    2024H2  NY      n=   5300 p50=      5,000 p90=      34,241
+  dominance: one-sided minutes 27397 (98.9 % of liq minutes); two-sided 292; ratio max/min p25=1.31 p50=2.44 p75=7.63 p90=18.71; two-sided minutes with ratio < 2.0: 117

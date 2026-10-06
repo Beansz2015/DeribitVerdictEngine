@@ -3,6 +3,7 @@
 **Owed by:** ruling `A4L-10` option (e), in [`a4-liq-ofi-logged-era-study-spec.md`](a4-liq-ofi-logged-era-study-spec.md) §9 RULED box (trader, 2026-10-03): a separate pre-registered study of trade-flow flips after liquidation clusters, trade store only, 2025-01-01 → 2026-07-02.
 **Start commit:** `0af9025`. **Tool commit:** `848be8a`. Counts run at `848be8a`.
 **Status:** SESSION 1 DONE. **No outcome has been computed, printed or looked at.**
+**⭐ 2026-10-06:** re-registered on the span 2023-01-01 → 2026-07-02 per ruling `TFS-12` (c). The dated addendum `docs/liq-tradeflow-flip-study-spec.md` §14 supersedes the counts, pins and readability verdict below. The session-1 text is kept unchanged.
 
 > ⛔ **ESCALATION TRIGGER MET — STOP, report, do not decide** (the brief's trigger: "the event count is unreadable even on 18 months").
 >
@@ -469,3 +470,57 @@ No choice here touches `settings.json`, scoring, a rendered value or a CSV schem
 | `LLS-1` thresholds applied trade by trade | Derived from minute-close samples; same caveat as the sister study |
 | The engine replay can run on the history store (`TFS-8` (d)) | Not checked |
 | `MT` handling | 66 `MT` trades; the "both sides, full amount" reading of `D-5`, untested against the venue (as the sister) |
+
+---
+
+## 14. Re-registration 2026-10-06 (span 2023-01-01 → 2026-07-02)
+
+**Owed by:** ruling `TFS-12` = (c), scoped to 2023–2024 (`docs/liq-tradeflow-flip-study-spec.md` §9 RULED box, trader 2026-10-05). Also applies the rulings `TFS-6` = (b) (5-min reference grid) and `TFS-8` = (d) (session 2 replays the engine's placed levels).
+**Start commit:** `cd11e6b`. **No outcome has been computed, printed or looked at.**
+
+### 14.1 Thresholds per period — stated BEFORE any FLIP count on the extended span
+
+⛔ **This subsection was written and committed before the counts tool ran on any 2023–2024 data.** The commit that adds it is the evidence. Only the derivation below (a liquidation-size distribution, signal side) had been run.
+
+**Instrument:** `docs/audits/proofs/large-liq-size-rederivation-2026-10-02/derive.py`, unchanged, run on `C:\DeribitData\history-2023-2024\` (24 files, 67,654,894 trades; 1,052,639 minute samples; runtime 2 min 18 s). Full output: `docs/audits/proofs/liq-tradeflow-reregistration-2026-10-06/derive-2023-2024-output.txt`. The script converts only `Amount`; it never reads `Price`.
+
+**Measured — p90 of the dominant liquidation size when the signal fires, `D-5` booking, USD.** The 2025–2026 rows come from the 2026-10-02 run (`docs/audits/proofs/large-liq-size-rederivation-2026-10-02/output.txt`, `D-5` block).
+
+| Segment | ASIA | LONDON | NY | All sessions | Fired minutes (ASIA / LONDON / NY) |
+|---|---:|---:|---:|---:|---|
+| 2023H1 | 60,000 | 27,300 | 69,100 | 55,780 | 1,357 / 871 / 1,653 |
+| 2023H2 | 51,160 | 26,762 | 116,920 | 60,440 | 1,742 / 1,090 / 2,459 |
+| 2024H1 | 65,030 | 86,120 | 111,260 | 91,990 | 2,566 / 1,625 / 3,395 |
+| 2024H2 | 61,887 | 47,095 | 34,241 | 44,370 | 3,594 / 1,916 / 5,300 |
+| **2023–2024 pooled** | **61,060** | **50,939** | **58,630** | **58,630** | 9,259 / 5,502 / 12,807 |
+| 2025H1 | 91,000 | 32,800 | 42,180 | 60,100 | 2,190 / 1,070 / 3,108 |
+| 2025H2 | 79,243 | 57,170 | 45,050 | 57,170 | 2,262 / 1,353 / 2,943 |
+| 2026H1 | 56,220 | 106,740 | 62,464 | 69,640 | 1,715 / 1,134 / 2,820 |
+| **`LLS-1` (2025-01 → 2026-09 pooled, ruled)** | **69,535** | **83,250** | **49,724** | 60,000 | 6,906 / 3,989 / 9,875 |
+
+**What the measurements show.**
+
+- ⛔ **The price-level premise does not hold.** The pooled p90 is 58,630 USD in 2023–2024 and 60,000 USD in 2025–2026 (−2 %). Per-trade size moved the other way: flag `T` p50 3,980 USD (2023–2024) vs 3,230 USD (2025–2026). A USD threshold from 2025–2026 does **not** select "nothing" in 2023.
+- **Half-year cells swing 2–4× inside a session, and not in price order.** NY: 116,920 (2023H2) → 34,241 (2024H2), while BTC traded higher in 2024H2. LONDON: 26,762 (2023H2) → 86,120 (2024H1). The swing is liquidation activity and sampling, not a unit drift.
+- **The session ORDER differs by era.** 2023–2024 vs `LLS-1`: LONDON 50,939 vs 83,250 (−39 %) · NY 58,630 vs 49,724 (+18 %) · ASIA 61,060 vs 69,535 (−12 %). Applying `LLS-1` to 2023–2024 would put LONDON's bar above that era's own p90.
+- **Dominance still barely matters:** 98.9 % of 2023–2024 liquidation minutes are one-sided (`D-5`).
+- BTC price levels per era are general market knowledge, **not read from the store** (no `Price` column was converted).
+
+**The rule (decision `TFS-13`, `docs/liq-tradeflow-flip-study-spec.md` §14.7):**
+
+| Era (by the timestamp of the trade that evaluates the 500-trade window) | ASIA | LONDON | NY | Source |
+|---|---:|---:|---:|---|
+| 2023-01-01 00:00 → 2024-12-31 23:59:59.999 UTC | **61,060** | **50,939** | **58,630** | This derivation, 2023–2024 pooled, `D-5` |
+| 2025-01-01 00:00 → 2026-07-02 23:59:59.999 UTC | **69,535** | **83,250** | **49,724** | `LLS-1` as ruled, unchanged |
+
+- **Reason.** It is the ruled `LLS-1` rule — per-session p90 of the `D-5` dominant size, pooled over a whole store — applied to each store. That is "re-derive the per-session thresholds per period" at the granularity `LLS-1` was ruled. It leaves the registered 2025–2026 events unchanged, so the session-1 counts stay a checkable subset.
+- **Strict `>`**, as before. One continuous pass across the seam (`TFS-14`): the 500-trade window and the 30-min de-clustering carry over from 2024-12-31 into 2025-01-01. A window evaluated at a 2025 trade uses the 2025 era threshold, even if it still holds 2024 trades.
+
+### 14.7 Decisions (new IDs continue `TFS-n`; `TFS-13` and `TFS-14` written before any extended-span count)
+
+`TFS-13` … are free: `git grep -n -E "TFS-1[3-9]|TFS-2[0-9]"` at `2fd9209` printed nothing.
+
+| ID | Question | Options | My read | Status |
+|---|---|---|---|---|
+| **`TFS-13`** | Which `LLS-1` threshold applies to which period | (a) `LLS-1` (2025–2026 values) on the whole span · (b) per era: 2023–2024 its own per-session p90 pooled over its store; 2025-01 → 2026-07-02 keeps `LLS-1` · (c) per half-year per session p90, all seven half-years · (d) one per-session p90 pooled over 2023-01 → 2026-07-02 | **(b).** Step 1 of the `CLAUDE.md` three-step test: (c) is the more granular option. Step 3: (c) is not more truthful — its premise (USD drift with price) is **falsified by the measurement** (pooled p90 58,630 vs 60,000), and its cells swing 2–4× with no price order, so a half-year p90 writes local noise into the event definition. It also re-defines the registered 2025–2026 events. (a) ignores the `TFS-12` instruction to re-derive, and puts LONDON's bar above the 2023–2024 LONDON p90. (d) replaces the ruled `LLS-1` study values and is not "per period" | Pending harness 6 |
+| **`TFS-14`** | How the two stores join | (a) one continuous pass across the seam, after a `TradeSeq` seam check (stop on a gap) · (b) two independent passes, state reset at 2025-01-01 | **(a).** It keeps the 500-trade window and the de-clustering truthful across midnight 2024-12-31; (b) would invent an onset at the seam if a cluster spans it. The seam check guarantees no trade is missing or doubled | Pending harness 6 |
