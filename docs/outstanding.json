@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-06T09:10Z",
+  "updated_utc": "2026-10-06T09:20Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -27,6 +27,12 @@
       "where": "AWS i-0b17cf2c2eb67496e (temporary)",
       "started_utc": "2026-10-05T13:20Z",
       "check": "tools/ops/rawbook/ssm-rawbook-status.json via aws ssm send-command"
+    },
+    {
+      "what": "Trade-flow-flip study re-registration on 2023-01-01 → 2026-07-02: re-derived per-session liquidation thresholds per period, outcome-blind counts and power",
+      "where": "agent (orchestrator-dispatched)",
+      "started_utc": "2026-10-06T09:18Z",
+      "check": "the orchestrator relays its report"
     }
   ],
   "dated": [
@@ -77,12 +83,6 @@
     }
   ],
   "next_up": [
-    {
-      "what": "Trade-flow study: re-derive the per-session large-liquidation thresholds for 2023–2024, then re-register the study on 2023-01-01 → 2026-07-02 (store C:\\DeribitData\\history-2023-2024 + the main store)",
-      "doc": "docs/liq-tradeflow-flip-study-spec.md",
-      "anchor": "§9 RULED box",
-      "model": "Opus 5.5, high"
-    },
     {
       "what": "Adversarial review of the indicator review pack, in a fresh seat — attack its order and classes",
       "doc": "docs/indicator-calibration-review-2026-10-02.md",
