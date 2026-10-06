@@ -2,6 +2,8 @@
 
 **Status:** session 1 done 2026-10-05 (UTC): spec, probe, smoke run. The full run is sized above 6 hours, so it goes to the temporary AWS instance (trader direction 2026-10-05, relayed by the orchestrator). **Session 2 = the read.** Start commit `a7a9cf0`.
 
+⛔ **Session 2, 2026-10-06 (UTC): NO VERDICT.** The run ended with 29 "prior" book mismatches. The diagnosis (`raw-book-absorption-test-spec.md` §11) cannot show any of the 29 to be a fallback-comparison artefact, because the probe recorded counters only, not the mismatching books. The trader's 2026-10-06 ruling therefore stops the read. The registered read was NOT run. Results: [`raw-book-absorption-test-results-2026-10-06.md`](raw-book-absorption-test-results-2026-10-06.md).
+
 **Source of the test:** the surviving half of the "REFUTED ON DIRECTION 2026-08-20" row — [`trader-tick-queue-archive.md` §C, `trim-2026-09-14-47`](trader-tick-queue-archive.md#trim-2026-09-14-47) and the live row in `docs/trader-tick-queue.md` §2. **Key scope:** the read-only key, `HH-2` (the read-only-key ruling, widened 2026-09-29) in [`history-host-and-raw-channel-read-2026-09-28.md`](history-host-and-raw-channel-read-2026-09-28.md) §4.
 
 **Class:** read-only research. No `settings.json` change, no scoring change, no collector contact, no `Core/` or `UI/` edit.
@@ -15,6 +17,7 @@
 > - **Session 2 starts with the diagnosis, not the read.** For each prior mismatch, decide: a timing artefact of the "prior" fallback comparison (no raw message carries the snapshot's `change_id`), or a rebuild error. Show the evidence per mismatch.
 > - **A verdict is allowed only if all 20 are shown to be fallback-comparison artefacts.** Any rebuild error, or any mismatch left unexplained, means no verdict: report and stop.
 > - Orchestrator's hypothesis, NOT verified: timing artefacts, because exact comparisons never mismatched.
+> - ⛔ **Outcome, 2026-10-06 (session 2):** the final count was 29, not 20. None of the 29 could be shown to be an artefact, so the read stopped with no verdict. See `raw-book-absorption-test-spec.md` §11.
 
 **Model: Opus 5.5 · Effort: HIGH.**
 
@@ -272,3 +275,114 @@ Tooling: `tools/ops/rawbook/rawbook-cloud.sh` (verbs `start` · `loop` · `uploa
 - Whether `HH-2`'s "dev machine only" condition is lifted for the temporary instance: relayed, not recorded in `HH-2`'s text.
 - The informative and aligned fractions for a 24 h run are extrapolated from 10 minutes of one session (NY open).
 - H-NET's identity assumes equal masks and equal fill attribution; that is what the run tests, not a verified premise.
+
+---
+
+## 11. Session 2 addendum, 2026-10-06 (UTC) — diagnosis of the 29 "prior" mismatches
+
+**Written before any per-episode `pullFrac` comparison was read.** ⚠ One disclosure: the seat printed `summary_20261005-132038.txt` to read the agreement line. That file also carries the probe's own convenience A-vs-B pair counts. The seat did not run its own pairing script and did not open `episodes_*.csv`. The diagnosis below uses only the agreement counters and the probe source.
+
+**Inputs.** `C:\DeribitData\rawbook-run1\out\` (archive MD5 = S3 ETag `7f9e2a5dd70da73c7929f0580e086ebd`, per the brief; not re-checked here). Probe source `tools/RawBookProbe/RawBookProbeProgram.vb` at `2d8d77d`.
+
+### 11.1 What the probe recorded about a mismatch — the limiting fact
+
+| Item | Recorded? | Where |
+|---|---|---|
+| Count of exact and prior matches and mismatches | Yes, cumulative | Every status line (1 per minute) in `console.log`, and `summary_*.txt` |
+| Time of each mismatch | **Only to the status-line minute** | Derived from the counter step between two status lines |
+| The 100 ms snapshot's `change_id` | **No** | — |
+| The prior raw `change_id` used in the comparison | **No** | — |
+| The 100 ms top 10 and the rebuilt top 10 | **No** — only a hash, held in memory | `BookHash` in `RawBookProbeProgram.vb`; the ring is not written out |
+| The raw messages around the mismatch | **No** | — |
+
+⛔ **Finding: `Resolve_Locked` in `RawBookProbeProgram.vb` only increments `_agreePriorMismatch`. It writes no event, no ids and no book.** The `events_*.log` file has no mismatch line. A re-run is not available (the instance is terminated).
+
+**So the per-mismatch test the ruling asks for cannot be run on this data.** To call one mismatch a timing artefact, the diagnosis needs at least: the 100 ms `change_id` X, the prior raw `change_id` P, the next raw `change_id` N > X, the 100 ms top 10, and the rebuilt top 10 at P and at N. A timing artefact predicts that the 100 ms book is a state between P and N: the raw arm reaches it at N, or inside the raw message that spans X. A rebuild error predicts that it matches neither, and that the rebuilt book stays wrong at the next exact check. None of these were recorded.
+
+### 11.2 Per-mismatch record — everything the data supports
+
+Method: a scratch script parsed all 1,439 status lines in `console.log`, took the step in each counter between consecutive lines, and listed every window where the prior-mismatch counter rose. The steps sum to 29, equal to the final counter. Columns per one-minute window: raw book messages, exact checks (all matched), prior checks that matched.
+
+| # | Window end (UTC) | `gen` | Raw msgs in window (percentile of all windows) | Exact checks, all matched | Prior matches | Class |
+|---:|---|---:|---:|---:|---:|---|
+| 1 | 2026-10-05 13:52:40 | 1 | 4,396 (94th) | 120 | 61 | UNEXPLAINED |
+| 2 | 13:54:40 | 1 | 4,427 (94th) | 108 | 72 | UNEXPLAINED |
+| 3 | 14:08:41 | 1 | 5,029 (100th) | 118 | 62 | UNEXPLAINED |
+| 4 | 14:09:41 | 1 | 4,755 (98th) | 127 | 53 | UNEXPLAINED |
+| 5 | 14:19:41 | 1 | 4,516 (96th) | 125 | 55 | UNEXPLAINED |
+| 6 | 14:30:42 | 1 | 4,134 (91st) | 114 | 66 | UNEXPLAINED |
+| 7 | 14:31:42 | 1 | 4,787 (99th) | 112 | 67 | UNEXPLAINED |
+| 8 | 15:38:51 | 2 | 4,722 (98th) | 128 | 52 | UNEXPLAINED |
+| 9 | 15:42:51 | 2 | 4,773 (99th) | 136 | 44 | UNEXPLAINED |
+| 10 | 15:43:51 | 2 | 4,701 (98th) | 137 | 43 | UNEXPLAINED |
+| 11 | 15:45:51 | 2 | 4,820 (99th) | 143 | 37 | UNEXPLAINED |
+| 12 | 16:16:54 | 2 | 3,824 (87th) | 115 | 66 | UNEXPLAINED |
+| 13 | 16:17:54 | 2 | 4,507 (95th) | 118 | 62 | UNEXPLAINED |
+| 14 | 16:23:54 | 2 | 4,473 (95th) | 120 | 60 | UNEXPLAINED |
+| 15 | 16:43:54 | 2 | 2,442 (67th) | 112 | 68 | UNEXPLAINED |
+| 16 | 17:30:57 | 2 | 4,229 (91st) | 141 | 39 | UNEXPLAINED |
+| 17 | 2026-10-06 02:29:39 | 2 | 2,335 (62nd) | 115 | 66 | UNEXPLAINED |
+| 18 | 03:05:41 | 2 | 2,743 (75th) | 119 | 59 | UNEXPLAINED |
+| 19 | 05:43:53 | 2 | 1,992 (42nd) | 98 | 82 | UNEXPLAINED |
+| 20 | 06:09:54 | 2 | 2,847 (77th) | 105 | 76 | UNEXPLAINED |
+| 21 | 08:49:05 | 2 | 2,357 (63rd) | 112 | 69 | UNEXPLAINED |
+| 22 | 09:16:08 | 2 | 2,350 (63rd) | 133 | 47 | UNEXPLAINED |
+| 23 | 09:21:09 | 2 | 2,738 (75th) | 130 | 51 | UNEXPLAINED |
+| 24–25 | 09:29:09 (two in one window) | 2 | 4,487 (95th) | 138 | 40 | UNEXPLAINED (both) |
+| 26 | 09:52:10 | 2 | 3,512 (84th) | 132 | 48 | UNEXPLAINED |
+| 27 | 11:32:18 | 2 | 2,002 (42nd) | 112 | 68 | UNEXPLAINED |
+| 28 | 11:34:18 | 2 | 1,768 (29th) | 103 | 75 | UNEXPLAINED |
+| 29 | 13:10:25 | 2 | 2,536 (70th) | 121 | 60 | UNEXPLAINED |
+
+**Tally: artefact shown 0 · rebuild error shown 0 · unexplained 29.** The count at 19.3 h was 20 (rows 1–20); rows 21–29 came after.
+
+### 11.3 Class-level evidence — consistent with the artefact hypothesis, but not proof per mismatch
+
+| Evidence | Value | Points to |
+|---|---|---|
+| Exact checks over the run | 156,319 matched, **0 mismatched** | No rebuild error visible at an exact `change_id` |
+| Exact checks inside the 28 mismatch windows | 3,392, all matched | The rebuilt top 10 agreed exactly within the same minute as every mismatch |
+| Prior-mismatch rate | 29 of 103,141 prior checks (0.028 %) | Rare |
+| Raw message rate, mismatch windows vs all others | median 4,182 vs 2,117 per minute; 15 of 28 windows at or above the 90th percentile | Mismatches cluster in busy minutes. **Both hypotheses predict this.** More changes per interval means more chance that a change between P and X touches the top 10. It also means more exposure to any rare apply bug |
+| Reconnect at 15:29:38 | Counter stayed at 7 across it | The reconnect did not produce a mismatch |
+| Raw chain breaks | 0 (`gaps 0` on every line) | No missed raw message |
+
+⚠ **Why the class-level evidence is not enough.**
+
+- A rebuild error that lives for less than the gap to the next exact check leaves no trace in the exact counter. That gap averages about 0.55 s: the 100 ms feed sent ~3 snapshots per second (about 181 per status minute), and 60 % of checks were exact.
+- A rebuild error triggered only by multi-change raw messages would co-occur with "prior" checks, because those messages are the ones that skip a `change_id`.
+- The exact-check record cannot rule out either case.
+
+⚠ **The fallback comparison's own premise is unverified.** The `Resolve_Locked` doc comment says the raw state at the latest `change_id` before X "is the same book". That holds only if no top-10 change lies between P and X. If the raw channel delivers several changes under one `change_id`, the true book at X lies between the states at P and at N, and some prior mismatches are expected. The run does not show which venue behaviour holds.
+
+### 11.4 A latent probe defect found during the diagnosis (did not fire)
+
+- On reconnect, `ProbeReset_Locked` clears `_pending`. It does **not** reset `_rawValid`, `_rawLastChange` or the change ring (`_ring`, `_ringIds`).
+- So a gen-2 100 ms snapshot that arrives before the gen-2 raw snapshot is held as pending. If its `change_id` is below the new raw snapshot's, the prior lookup finds the last **gen-1** raw state, about 2 s stale.
+- Effect in this run: **none observed.** The prior-mismatch counter read 7 at 15:28:50 and 7 at 15:29:50. The reconnect was at 15:29:38–40.
+- A re-run must fix it. Otherwise a reconnect can add a mismatch that looks like the others but has a known cause.
+
+### 11.5 Decision under the 2026-10-06 ruling
+
+- The ruling (`raw-book-absorption-test-spec.md` §0 box): a verdict only if **all** mismatches are shown to be fallback-comparison artefacts.
+- Shown: 0 of 29. **→ NO VERDICT. The read stops here.**
+- The registered read (`RBA-3` pairing rule, `RBA-4` thresholds) was **not run**. `episodes_*.csv` was not opened. The registration stays unchanged and unused, so a later run can use it without look-ahead.
+
+### 11.6 What would let a read proceed — options for the trader (not decided here)
+
+This is a new design decision, so the seat stops and reports it.
+
+| Option | What it takes | What it gives |
+|---|---|---|
+| (a) Instrumented re-run | Add per-mismatch logging to the probe: X, P, N, both top 10s, the rebuilt top 10 at N, the raw messages in (P, N]. Fix the reconnect reset in `raw-book-absorption-test-spec.md` §11.4. Run again | A per-mismatch diagnosis, then the read on fresh data. ⚠ Needs AWS for 24 h, or a dev-machine run of at most 6 h (fewer pairs, one session). The trader is away 2026-10-14 → 2026-11-25 |
+| (b) The trader accepts the class-level evidence in `raw-book-absorption-test-spec.md` §11.3 | A trader ruling that relaxes the per-mismatch bar | The read can run on this run's data. ⚠ It reverses the test the 2026-10-06 ruling set |
+| (c) Leave it until after 2026-11-25 | Nothing now | The mechanism-revision build stays gated |
+
+Seat's read: (a). It records more and needs no relaxed bar. (b) gives up a guarantee for speed, so under the auto-proceed rules in `CLAUDE.md` it is reserved for the trader in any case.
+
+### 11.7 What this session did not verify
+
+- The archive MD5 against the S3 ETag: carried from the brief, not re-run.
+- Whether the Deribit raw book channel delivers several changes under one `change_id`: not measurable from this data.
+- The probe's convenience pair counts in `summary_*.txt`: seen, not re-derived, and not used.
+- Harness 6 (the decision-bias tripwire) was not run on the options in `raw-book-absorption-test-spec.md` §11.6, because the seat does not decide them.
