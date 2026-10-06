@@ -26,14 +26,26 @@
 # the first line whose Timestamp is >= 2026-07-03 00:00:00.000 UTC; that line is tokenised for its timestamp only
 # and nothing after it is read. Every trade passed to the scan is asserted < the fence.
 #
-# Usage (from the repo root):
-#   python tools/ops/liq_tradeflow_counts.py              # the counts at the pinned inputs
-#   python tools/ops/liq_tradeflow_counts.py --selftest   # synthetic data, exact expected values; exit 1 on a failure
+# RE-REGISTRATION 2026-10-06 (spec section 14; rulings TFS-12 (c), TFS-6 (b); decisions TFS-13, TFS-14):
+#   --span extended (the default): TWO stores, read as ONE continuous pass in order -- C:/DeribitData/history-2023-2024
+#     (trades_2023-01 .. trades_2024-12) then C:/DeribitData/history (trades_2025-01 .. trades_2026-07, same fence).
+#     The TradeSeq seam between the stores is checked first (last seq + 1 == first seq, time not backward); a failed
+#     store seam is a STOP. LLS-1 thresholds apply PER ERA by the timestamp of the trade that evaluates the window:
+#     2023-2024 its own pooled per-session p90 (D-5), 2025-01-01 onward the ruled LLS-1. Reference grid 5 min.
+#   --span registered: session 1 exactly (one store, 2025-01 .. 2026-07, LLS-1 only, 15-min grid). Its output is
+#     line-for-line the session-1 H-1 block.
+#   The sister's scan code is still imported unchanged: for the pass, a4.LLS1 is swapped for an EraThresholds table
+#   (restored afterwards). a4.scan_rows reads LLS1[sess] per trade; the fenced row iterator sets the era first.
 #
-# Runtime: several minutes (19 store files, one pass).
+# Usage (from the repo root):
+#   python tools/ops/liq_tradeflow_counts.py                       # re-registered counts, 2023-01-01 -> 2026-07-02
+#   python tools/ops/liq_tradeflow_counts.py --span registered     # session-1 counts (parity)
+#   python tools/ops/liq_tradeflow_counts.py --selftest            # synthetic data, exact expected values; exit 1 on a failure
+#
+# Runtime: several minutes (43 store files for the extended span, one pass).
 
 import argparse, json, math, os, statistics, sys, tempfile, time
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
@@ -73,21 +85,112 @@ EFFECTS = a4.EFFECTS
 SIGMA_CONS, SIGMA_OPT = a4.SIGMA_CONS, a4.SIGMA_OPT   # published proxies, carried (sister spec section 6)
 ATR_SCALE_CARRIED = 2.45                         # sister H-1 pooled event/median ATR scale, carried, NOT measured here
 
+# ---- re-registration 2026-10-06 (spec section 14)
+STORE_2023 = "C:/DeribitData/history-2023-2024"
+MONTHS_2023 = ["%04d-%02d" % (y, m) for y in (2023, 2024) for m in range(1, 13)]
+LLS1_RULED = dict(a4.LLS1)                       # ASIA 69535 LONDON 83250 NY 49724 (2025-01 -> 2026-09 pooled, D-5)
+LLS_2023_24 = {"ASIA": 61060, "LONDON": 50939, "NY": 58630}   # derive.py on the 2023-2024 store, pooled, D-5 (TFS-13 (b))
+ERAS_REGISTERED = [(ms(datetime(2025, 1, 1)), LLS1_RULED, "2025-01-01 .. 2026-07-02 (LLS-1, ruled)")]
+ERAS_EXTENDED = [(ms(datetime(2023, 1, 1)), LLS_2023_24, "2023-01-01 .. 2024-12-31 (2023-2024 store p90)"),
+                 (ms(datetime(2025, 1, 1)), LLS1_RULED, "2025-01-01 .. 2026-07-02 (LLS-1, ruled)")]
+SPAN = "registered"                              # set by configure(); the selftest runs on the registered defaults
+ERAS = ERAS_REGISTERED
+
 
 def utc(t_ms):
     return EPOCH + timedelta(milliseconds=t_ms)
 
 
 def period_of(dt):
-    if dt < datetime(2025, 7, 1):
-        return "2025H1"
-    if dt < datetime(2026, 1, 1):
-        return "2025H2"
-    return "2026H1*"                             # 2026-01-01 -> 2026-07-02 (the two July days fold in here)
+    if dt >= datetime(2026, 1, 1):
+        return "2026H1*"                         # 2026-01-01 -> 2026-07-02 (the two July days fold in here)
+    return "%dH%d" % (dt.year, 1 if dt.month <= 6 else 2)
 
 
 PERIODS = ("2025H1", "2025H2", "2026H1*")
 SESSIONS = ("ASIA", "LONDON", "NY")
+
+
+def configure(span, grid_min=None):
+    """Sets the span-level globals. registered = session 1 exactly; extended = the 2026-10-06 re-registration."""
+    global SPAN, START, PERIODS, ERAS, GRID_MS
+    SPAN = span
+    if span == "registered":
+        START, ERAS = datetime(2025, 1, 1), ERAS_REGISTERED
+        PERIODS = ("2025H1", "2025H2", "2026H1*")
+        GRID_MS = (grid_min or 15) * 60 * 1000
+    elif span == "extended":
+        START, ERAS = datetime(2023, 1, 1), ERAS_EXTENDED
+        PERIODS = ("2023H1", "2023H2", "2024H1", "2024H2", "2025H1", "2025H2", "2026H1*")
+        GRID_MS = (grid_min or 5) * 60 * 1000    # TFS-6 (b), ruled 2026-10-05
+    else:
+        raise SystemExit("unknown span %r" % span)
+
+
+class EraThresholds(dict):
+    """The per-era LLS-1 table, installed as a4.LLS1 for one pass. a4.scan_rows reads LLS1[sess] once per evaluated
+    trade; fenced_rows calls at(ts) before it yields that trade, so the lookup uses the trade's own era.
+    Era i covers [start_i, start_{i+1}): a trade exactly at an era start belongs to the NEW era."""
+
+    def __init__(self, eras):
+        super().__init__(eras[0][1])
+        self.starts = [e[0] for e in eras]
+        self.tabs = [e[1] for e in eras]
+        self.n = [0] * len(eras)
+        self.i = -1
+        self.lo = self.hi = 0
+
+    def at(self, ts):
+        if not (self.lo <= ts < self.hi):
+            i = bisect_right(self.starts, ts) - 1
+            if i < 0:
+                raise SystemExit("STOP: a trade before the first era start reached the scan")
+            self.i = i
+            self.lo = self.starts[i]
+            self.hi = self.starts[i + 1] if i + 1 < len(self.starts) else 1 << 62
+        self.n[self.i] += 1
+
+    def __getitem__(self, sess):
+        return self.tabs[self.i][sess]
+
+
+def tail_line(path):
+    """The last non-empty line of a file, read from the end."""
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        back = 4096
+        while True:
+            f.seek(max(0, size - back))
+            lines = [x for x in f.read().split(b"\n") if x.strip()]
+            if len(lines) >= 2 or back >= size:
+                return lines[-1].decode("utf-8").rstrip("\r")
+            back *= 2
+
+
+def first_data_line(path):
+    with open(path, encoding="utf-8") as f:
+        f.readline()
+        return f.readline().rstrip("\r\n")
+
+
+def seam_check(prev_path, next_path):
+    """Last trade of prev_path vs first trade of next_path. Reads Timestamp (col 0) and TradeSeq (col 6) only.
+    PASS needs next seq == last seq + 1 (no trade missing, none doubled) and next timestamp >= last timestamp."""
+    a, b = tail_line(prev_path).split(","), first_data_line(next_path).split(",")
+    lt, ls, ft, fs = int(a[0]), int(a[6]), int(b[0]), int(b[6])
+    return (fs == ls + 1 and ft >= lt), (lt, ls, ft, fs)
+
+
+def check_store_seams(groups, out=print):
+    """TFS-14 (a): each store's last file vs the next store's first file must be contiguous by TradeSeq.
+    A failure is a STOP (SystemExit) before any count is produced."""
+    for k in range(1, len(groups)):
+        ok, (lt, ls, ft, fs) = seam_check(groups[k - 1][-1], groups[k][0])
+        out("store seam %s -> %s: last seq %d at %s, first seq %d at %s: %s"
+            % (os.path.basename(groups[k - 1][-1]), os.path.basename(groups[k][0]), ls, utc(lt), fs, utc(ft), "PASS" if ok else "FAIL"))
+        if not ok:
+            raise SystemExit("STOP: the store seam failed (TFS-14); no counts are produced")
 
 
 def engine_tfi_from_settings(path="settings.json"):
@@ -151,16 +254,34 @@ class Machine:
                 self.I = (self.B - self.S) / (self.B + self.S)
 
 
-def fenced_rows(paths, cnt):
-    """The sister's row iterator, stopped at the fence. Nothing at or after the fence is passed on."""
+def fenced_rows(paths, cnt, thr=None):
+    """The sister's row iterator, stopped at the fence. Nothing at or after the fence is passed on.
+    thr (an EraThresholds) is pointed at each trade's era before the trade is yielded."""
     for ts, p in a4.iter_store_rows(paths, cnt):
         if ts >= FENCE_MS:
             cnt["fence_stop"] += 1
             return
+        if thr is not None:
+            thr.at(ts)
         yield ts, p
 
 
-def run_pass(paths, cnt, variants=VARIANTS):
+def run_pass(paths, cnt, variants=VARIANTS, eras=None):
+    """eras: [(start_ms, {session: USD}, label), ...] ascending; default = the span's ERAS. The sister's a4.LLS1 is
+    swapped for an EraThresholds table for the pass and restored afterwards."""
+    thr = EraThresholds(eras if eras is not None else ERAS)
+    saved = a4.LLS1
+    a4.LLS1 = thr
+    try:
+        res = _run_pass(paths, cnt, variants, thr)
+    finally:
+        a4.LLS1 = saved
+    for k, n in enumerate(thr.n):
+        cnt["era_trades_%d" % k] = n
+    return res
+
+
+def _run_pass(paths, cnt, variants, thr):
     time_vars = [v for v in variants if v[1] == "time"]
     trade_vars = [v for v in variants if v[1] == "trades"]
     ref_Ls = sorted(set(v[3] for v in time_vars))
@@ -298,7 +419,7 @@ def run_pass(paths, cnt, variants=VARIANTS):
             for name, mode, Q, L in variants:
                 machines.append(Machine(onset, name, mode, Q, L, ts))
 
-    events, spans = a4.scan_rows(fenced_rows(paths, cnt), cnt, hook)
+    events, spans = a4.scan_rows(fenced_rows(paths, cnt, thr), cnt, hook)
     for m in machines:
         m.status = "flow_window_crosses_fence"
         done.append(m)
@@ -370,8 +491,15 @@ def report(events, spans, by_ev, refs, refdrop, st, an, cnt, tfi_info, out=print
     out("fence: trades < %s UTC (%d ms); first trade read %s; last trade read %s; fence stop hit: %s"
         % (FENCE, FENCE_MS, utc(st["min_ts"]), utc(st["max_ts"]), "yes" if cnt["fence_stop"] else "NO"))
     out("assert max trade read < fence: %s" % ("PASS" if st["max_ts"] < FENCE_MS else "FAIL"))
-    out("LLS-1 thresholds (USD, strict >): " + " ".join("%s=%d" % (k, a4.LLS1[k]) for k in SESSIONS)
-        + "  window=%d trades  dominance=%.1f  de-cluster gap=%d min" % (a4.WIN, a4.DOM, a4.GAP_S // 60))
+    if len(ERAS) == 1:
+        out("LLS-1 thresholds (USD, strict >): " + " ".join("%s=%d" % (k, a4.LLS1[k]) for k in SESSIONS)
+            + "  window=%d trades  dominance=%.1f  de-cluster gap=%d min" % (a4.WIN, a4.DOM, a4.GAP_S // 60))
+    else:
+        out("LLS-1 thresholds per era (USD, strict >; era = the evaluating trade's timestamp; TFS-13 (b))"
+            + "  window=%d trades  dominance=%.1f  de-cluster gap=%d min" % (a4.WIN, a4.DOM, a4.GAP_S // 60))
+        for k, (s0, tab, lab) in enumerate(ERAS):
+            out("  era %d from %s  %-44s " % (k + 1, utc(s0).date(), lab) + " ".join("%s=%d" % (x, tab[x]) for x in SESSIONS)
+                + "  trades scanned %d" % cnt["era_trades_%d" % k])
     out("store: trades=%d  flags T=%d M=%d MT=%d  unrecognised skipped=%d  out-of-order=%d"
         % (cnt["trades"], cnt["flag_T"], cnt["flag_M"], cnt["flag_MT"], cnt["unrecognised_skipped"], cnt["store_out_of_order"]))
     out("flow: variants %s (primary %s)  N_MIN=%d  cap D-T0<=%d min  grid=%d min  ref exclusion: firing in [g-%d min, window end)"
@@ -684,6 +812,57 @@ def selftest(out=print):
         out("  run B raised %r (a poisoned line at/after the fence was parsed)" % ex)
         fails.append("run B raised")
 
+    # run C: per-era LLS-1 thresholds (TFS-13). Two stores, one continuous pass. Each liquidation size sits BETWEEN the
+    # two eras' thresholds for its session, so applying the wrong era's table changes which trades fire.
+    out("SELFTEST: run C (per-era thresholds, two stores, one pass)")
+    eras_c = [(ms(datetime(2024, 12, 1)), {"ASIA": 100000, "LONDON": 100000, "NY": 100000}, "test era 1"),
+              (ms(datetime(2025, 1, 1)), {"ASIA": 69535, "LONDON": 83250, "NY": 49724}, "test era 2")]
+    t1 = ms(datetime(2024, 12, 31, 14, 0, 0))    # NY 70,000: below era 1 (100,000) -> no fire; era 2 would fire
+    t2 = ms(datetime(2024, 12, 31, 15, 0, 0))    # NY 120,000: above both -> fires (onset)
+    t3 = ms(datetime(2025, 1, 1, 0, 0, 0))       # ASIA 80,000 EXACTLY at the era-2 start: era 2 (69,535) -> fires
+    t4 = ms(datetime(2025, 1, 1, 14, 0, 0))      # NY 60,000: era 2 (49,724) -> fires; era 1 would not
+    c1, c2 = [], []
+    for t, amt, dst in ((t1, 70000.0, c1), (t2, 120000.0, c1), (t3, 80000.0, c2), (t4, 60000.0, c2)):
+        dst.append((t, amt, "sell", "T"))
+        filler(dst, t + 1000)                    # 520 unflagged trades clear the 500-trade window
+    os.makedirs(os.path.join(tmp, "c1")); os.makedirs(os.path.join(tmp, "c2"))
+    pc1 = os.path.join(tmp, "c1", "trades_2024-12.csv"); pc2 = os.path.join(tmp, "c2", "trades_2025-01.csv")
+    write(pc1, c1); write(pc2, c2)
+    cnt = Counter()
+    try:
+        ev3, _, _, _, _, _ = run_pass([pc1, pc2], cnt, eras=eras_c)
+        check("eras: onsets = t2, t3, t4 (t1 below its own era's bar)", [e.t0 for e in ev3], [t2, t3, t4])
+        check("eras: sessions of the onsets", [e.sess for e in ev3], ["NY", "ASIA", "NY"])
+        check("eras: trades scanned per era (t3 at the era start counts in era 2)", (cnt["era_trades_0"], cnt["era_trades_1"]), (521 * 2, 521 * 2))
+        check("eras: a4.LLS1 restored after the pass", (type(a4.LLS1) is dict, a4.LLS1 == LLS1_RULED), (True, True))
+    except Exception as ex:
+        out("  run C raised %r" % ex)
+        fails.append("run C raised")
+
+    # seam checks (TFS-14): TradeSeq must step by exactly 1 and time must not go back across a store seam
+    out("SELFTEST: store seam (TradeSeq)")
+
+    def write_seq(path, rows):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(HDR)
+            for t, sq in rows:
+                f.write("%d,NOT_A_PRICE,10.00,buy,none,1,%d,x,x,0,1\n" % (t, sq))
+
+    os.makedirs(os.path.join(tmp, "s"))
+    sp = os.path.join(tmp, "s", "prev.csv")
+    write_seq(sp, [(1000 + k, 100 - 299 + k) for k in range(300)])      # 300 lines (> 4 KB), last = (1299, 100)
+    cases = (("contiguous (100 -> 101)", 1299, 101, True), ("gap (100 -> 102): a missing trade", 1300, 102, False),
+             ("duplicate (100 -> 100)", 1300, 100, False), ("time goes back (1299 -> 1298)", 1298, 101, False))
+    for k, (lab, ft, fs, want) in enumerate(cases):
+        sn = os.path.join(tmp, "s", "next%d.csv" % k)
+        write_seq(sn, [(ft, fs), (ft + 5, fs + 1)])
+        check("seam: " + lab, seam_check(sp, sn)[0], want)
+    try:
+        check_store_seams([[sp], [os.path.join(tmp, "s", "next1.csv")]], out=lambda s: None)
+        check("seam: a failed store seam is a STOP (SystemExit)", "no stop", "stop")
+    except SystemExit:
+        check("seam: a failed store seam is a STOP (SystemExit)", "stop", "stop")
+
     out("SELFTEST: power (the sister's functions)")
     check("MDE two-sample n=100/100 sigma=10 alpha=.05", round(a4.mde(0.05, 10.0, 100, 100), 3), 3.962)
     out("SELFTEST %s (%d failure(s))" % ("PASS" if not fails else "FAIL", len(fails)))
@@ -692,19 +871,42 @@ def selftest(out=print):
 
 def main():
     ap = argparse.ArgumentParser(description="Liquidation x trade-flow flip study: outcome-blind counts")
-    ap.add_argument("--store", default=DEFAULT_STORE)
+    ap.add_argument("--span", choices=("extended", "registered"), default="extended",
+                    help="extended = 2023-01-01 -> 2026-07-02, two stores (the 2026-10-06 re-registration); "
+                         "registered = session 1 exactly (2025-01-01 -> 2026-07-02)")
+    ap.add_argument("--store", default=DEFAULT_STORE, help="the 2025-2026 store")
+    ap.add_argument("--store-2023", default=STORE_2023, help="the 2023-2024 store (extended span only)")
+    ap.add_argument("--grid-min", type=int, default=None, help="reference grid step; default 5 (extended), 15 (registered)")
     ap.add_argument("--settings", default="settings.json")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         sys.exit(selftest())
+    configure(a.span, a.grid_min)
     t_start = time.time()
     print("Liquidation x TRADE-FLOW flip - counts (OUTCOME-BLIND). docs/liq-tradeflow-flip-study-spec.md")
-    paths = [os.path.join(a.store, "trades_%s.csv" % m) for m in MONTHS]
+    stores = [(a.store, MONTHS)] if SPAN == "registered" else [(a.store_2023, MONTHS_2023), (a.store, MONTHS)]
+    groups = [[os.path.join(d, "trades_%s.csv" % m) for m in mm] for d, mm in stores]
+    paths = [p for g in groups for p in g]
     miss = [p for p in paths if not os.path.exists(p)]
     if miss:
         raise SystemExit("STOP: missing store files %s" % miss)
-    print("store files: %d (trades_%s.csv .. trades_%s.csv), bytes %d" % (len(paths), MONTHS[0], MONTHS[-1], sum(os.path.getsize(p) for p in paths)))
+    if SPAN == "registered":
+        print("store files: %d (trades_%s.csv .. trades_%s.csv), bytes %d" % (len(paths), MONTHS[0], MONTHS[-1], sum(os.path.getsize(p) for p in paths)))
+    else:
+        print("store files: %d in %d stores, read in this order as one pass, bytes %d"
+              % (len(paths), len(groups), sum(os.path.getsize(p) for p in paths)))
+        for (d, mm), g in zip(stores, groups):
+            print("  %s  trades_%s.csv .. trades_%s.csv  files %d  bytes %d" % (d, mm[0], mm[-1], len(g), sum(os.path.getsize(p) for p in g)))
+        check_store_seams(groups)
+        mbad = []
+        for g in groups:
+            for x, y in zip(g, g[1:]):
+                ok, v = seam_check(x, y)
+                if not ok:
+                    mbad.append("%s->%s seq %d->%d" % (os.path.basename(x), os.path.basename(y), v[1], v[3]))
+        print("month-file seams inside each store: %d checked, %d FAIL%s"
+              % (sum(len(g) - 1 for g in groups), len(mbad), (": " + "; ".join(mbad)) if mbad else ""))
     tfi_info = engine_tfi_from_settings(a.settings)
     cnt = Counter()
     events, spans, by_ev, refs, refdrop, st = run_pass(paths, cnt)
