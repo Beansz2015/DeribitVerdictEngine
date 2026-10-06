@@ -920,3 +920,57 @@ No choice here touches `settings.json`, scoring, a rendered value or a CSV schem
 - **What happens next:** the same command, same code (`b41e0e2`), same seed, unchanged settings. It is resumed, not re-run with any change: the seeded bootstrap makes it deterministic. The resumed output must reproduce the 11 printed rows exactly, and the result section says whether it did.
 - **Resumed run, 2026-10-06 (code `b41e0e2`): crashed in phase S on a bug, after the 11 rows above and before any test was printed.** Its first 43 output lines are identical to the interrupted run's (`diff` printed nothing). It then printed the rest of the arm explanation table (BALANCED NY, WITH, CONTROL rows). It crashed (`KeyError: 'trail'`) while building the trailing-tercile sensitivity for TFS-H3. **No TFS-H1, TFS-H2 or TFS-H3 statistic, Holm result, label or split was printed.**
 - **The fix (the commit that adds this line):** in `phase_s`, the trailing-class predicates read `q["r"].get("trail")`, because control rows carry no trailing class. One cosmetic fix in the same commit: a descriptive table header printed `%%` for `%`. No rule, parameter, seed or population changed. The run is launched a third time with this code. Both earlier outputs are kept in `docs/audits/proofs/liq-tradeflow-session2-2026-10-06/`.
+
+---
+
+## 16. Session 2 result — 2026-10-06
+
+**Run:** `python tools/ops/liq_tradeflow_read.py --run --workdir <dir>`, code at `57b83c8` (the `b41e0e2` design plus the crash fix in `docs/liq-tradeflow-flip-study-spec.md` §15.6). Runtime 874 s. Full output: `docs/audits/proofs/liq-tradeflow-session2-2026-10-06/run3-output.txt`. Its first 52 lines are identical to the crashed run's, and its first 43 to the interrupted run's. **No parameter, seed, rule or population differs between the three launches.**
+
+### 16.1 Gates
+
+| Gate | Result |
+|---|---|
+| `H-3` | PASS again: 152 of 152 lines; whole block 192 of 192 |
+| Entry identification | 3,914 time-rule event rows: the phase-A ordinal equals the first trade ≥ D on every row. All 991 TFI30 rows and all 201,040 control rows have an entry |
+| Outcome-side drops (arm d) | FLIP 0 of 171 · NO-FLIP 0 of 813 · CONTROL 5 of 201,040 ("few_candles", 2023-01-01). Far under the 10 % STOP |
+| Fence | Every pass stopped at the first trade ≥ 2026-07-03 00:00 UTC; 130,722,713 trades in every pass |
+
+### 16.2 The three registered tests (arm d, placed levels; Holm across three; census label)
+
+| Test | FULL d, bps [95 % CI] (n) | Half H1 | Half H2 | boot p | Holm α | Holm-adjusted CI | Full-span Holm | Trailing-tercile d | **Label** |
+|---|---|---|---|---|---|---|---|---|---|
+| `TFS-H1` FLIP − NO-FLIP (re-weighted by session × side) | **+2.8 [−2.2, +7.8]** (171/813) | +5.0 [−2.1, +11.9] | +0.8 [−6.5, +8.2] | 0.270 | 0.0167 | [−3.2, +8.9] | not passed | +4.0 | **NO DIFFERENCE SHOWN** |
+| `TFS-H2` FLIP vs 0 | **−1.1 [−5.1, +2.9]** (171) | −0.4 | −1.6 | 0.595 | 0.05 | [−5.1, +2.9] | not passed | −0.3 | **NO DIFFERENCE SHOWN** |
+| `TFS-H3` FLIP − CONTROL (re-weighted by session × side × ATR tercile) | **+2.0 [−2.1, +6.1]** (171/201,035) | +2.8 | +1.5 | 0.321 | 0.025 | [−2.6, +6.5] | not passed | +2.8 | **NO DIFFERENCE SHOWN** |
+
+- No trailing-tercile point changes sign. "THRESHOLD-SENSITIVE" does not apply.
+- **σ, now measured** (net EV per trade, arm d): FLIP 25.7 bps, NO-FLIP 38.2 bps, CONTROL 13.6 bps. The carried σ in `docs/liq-tradeflow-flip-study-spec.md` §14.5 was 36.0 (optimistic × 2.45) to 84.0 (conservative × 2.45). The realised CI half-widths are about 4–5 bps.
+
+### 16.3 Explaining numbers (arm d, all sessions; not tests)
+
+| Arm | n | Success % | Net breakeven % (Σ) | Net edge pp | Net EV per trade [95 % CI] |
+|---|---|---|---|---|---|
+| FLIP (fade) | 171 | 52.0 | 57.8 | −5.8 | −1.1 [−5.1, +2.9] |
+| NO-FLIP (fade) | 813 | 45.9 | 54.7 | −8.8 | −4.2 [−6.8, −1.6] |
+| CONTROL (with the flow) | 201,035 | 48.9 | 60.9 | −12.0 | −3.0 [−3.1, −2.9] |
+
+### 16.4 Descriptive (never labelled; full tables in the run output)
+
+| Item | Reading |
+|---|---|
+| Arm c (ATR-fallback geometry) | H1 +3.1 [−2.4, +8.7] · H2 +0.1 [−4.3, +4.5] · H3 +3.2 [−1.3, +7.5]. Same signs as arm d for H1 and H3 |
+| Fixed-horizon mark | H1 −6.2 [−15.7, +3.1] · H2 −7.0 [−15.1, +0.5] · H3 −4.2 [−12.3, +3.3]. Without levels, the FLIP fade leans negative |
+| Half-years | FLIP n 10–35 each; FLIP − NO-FLIP runs from −7.6 to +9.5 bps, and every CI includes 0 |
+| Sessions | LONDON FLIP − NO-FLIP +14.6 [+0.6, +30.0] on 21 FLIP rows. It is one of about 20 split cells, so one cell excluding 0 is about what chance gives. Not a finding |
+| `TFS-H4` slope | +2.2 [−1.7, +6.0] bps per unit of fade-signed I. Terciles: low −2.9, mid −8.5 [−13.0, −3.9], high +0.5. Not monotone |
+| Variants | FLIP − NO-FLIP: `Q0L30` −0.5 · `Q0L120` +4.4 [−0.4, +9.0] · `Q30L60` −0.4 · `TFI30` −1.7 · `TFI30` engine ±0.15 −0.7. Every CI includes 0 |
+| Geometry | Placed target p50: FLIP 18.7, NO-FLIP 25.9, CONTROL 9.2 bps. The engine's 8 bps min-move floor (not applied) sits above 19 % of FLIP, 15 % of NO-FLIP and 44 % of CONTROL targets |
+
+### 16.5 What the result licenses
+
+- **Outcome evidence (`docs/liq-tradeflow-flip-study-spec.md` §10, row "anything else"): undecided.** No test shows a difference. The CIs bound the effects: the FLIP fade's net EV lies in [−5.1, +2.9] bps; the FLIP lift over NO-FLIP is at most +7.8 bps; the lift over flow-following alone is at most +6.1 bps.
+- **It weakens the case for A4** (the liquidation × OFI flip detector) at the trade-flow level. The trade-side proxy for "flow turns against the cascade" adds no measurable edge. The fade stays under its net breakeven in every arm.
+- **It licenses no engine change.** The live liquidation vote stays parked (ruling `D-4`). The live stream carries no liquidation flag (finding `L-1`). Nothing here touches `settings.json` or scoring.
+- **It does not test OFI.** The sealed sister study (`docs/a4-liq-ofi-logged-era-study-spec.md`) is untouched; its span after 2026-07-03 was never read.
+- The best attainable label was a full-span finding (`TFS-15`). No test reached it.

@@ -1,0 +1,162 @@
+Liquidation x TRADE-FLOW flip - SESSION 2 outcome read. docs/liq-tradeflow-flip-study-spec.md
+pins (tracked settings.json v69): fee 3.0 bps maker/maker; ATR period 7; fallback target x1.75 NY x2.0 LONDON x1.25 ASIA; stop x1.6; structural_levels {"enabled": true, "sessions": {"ASIA": {"fallback_target_atr_mult": 1.25}, "LONDON": {"fallback_target_atr_mult": 2.0}, "NY": {}}, "stop_arbitration_mode": 0, "stop_buffer_pct": 0.0, "stop_max_atr_mult": 1.6, "stop_min_floor_ticks": 4, "stop_too_loose_mode": "clamp", "target_arbitration_mode": 0, "target_buffer_pct": 0.0, "target_max_atr_mult": 3.5, "use_best_pivot_candidate": false}
+H-3: sections 1-6 of the re-run vs the H-4 block (docs/liq-tradeflow-flip-study-spec.md section 14.4): 152 vs 152 lines: PASS (identical)
+H-3 (information): the whole block incl. header, section 0 and section 7: 192 vs 192 lines: identical
+rows: event-variant rows 4905 (primary population 984), control rows 201040
+phase B: trades read 130722713 (fence stop: yes); candles 1m 1841759 3m 613920 5m 368352; empty buckets filled flat 1m 71545 3m 3183 5m 661
+phase B entry check: TFI30: entry = the trade after the 30th (ts >= its ts)   991
+phase B entry check: control: entry = first trade >= g + 60 s                 201040
+phase B entry check: time rule: entry ts >= D, previous trade ts < D          3914
+phase B entry check: time rule: phase-A ordinal == first trade >= D           3914
+phase L: candles: 1m 1841759  3m 613920  5m 368352
+phase L: rows placed: 205945  status (d)/(c): few_candles/few_candles=5  ok/ok=205940
+phase C: trades walked 130722713; walks 411880; resolved success 198978, stop 187995, timeout 24907; no trade in the window 0
+
+=== S0. Population and halves (registered; outcome-side drops are counted below, not re-split) ===
+primary population 984 (FLIP 171, NO-FLIP 813); control 201040; 512 event days; half H1 = 2023-01-08..2024-09-30 (256 days), half H2 = 2024-10-01..2026-06-30
+control rows: half by date (H1 = before 2024-10-01)
+
+=== S1. Outcome-side drops per arm (printed before any outcome) ===
+arm d placed levels (TFS-8 (d), primary)     FLIP     rows    171  dropped     0 (0.00 %)  -
+arm d placed levels (TFS-8 (d), primary)     NO-FLIP  rows    813  dropped     0 (0.00 %)  -
+arm d placed levels (TFS-8 (d), primary)     CONTROL  rows 201040  dropped     5 (0.00 %)  few_candles=5
+arm c ATR-fallback geometry (descriptive)    FLIP     rows    171  dropped     0 (0.00 %)  -
+arm c ATR-fallback geometry (descriptive)    NO-FLIP  rows    813  dropped     0 (0.00 %)  -
+arm c ATR-fallback geometry (descriptive)    CONTROL  rows 201040  dropped     5 (0.00 %)  few_candles=5
+TFS-H3 ATR tercile edges (USD, per session, from 201035 control rows with an engine ATR): ASIA 36.90 / 71.98  LONDON 37.51 / 70.13  NY 21.44 / 47.94
+
+=== S2. PRIMARY: placed levels (TFS-8 (d)), house net EV per trade ===
+fee 3.0 bps round trip (maker/maker); windows NY 15 min, ASIA/LONDON 45 min; bootstrap 10000 resamples of whole UTC days, seed 20261005
+
+| Arm | Session | n | Success % | Timeout % | Gross breakeven % | Net breakeven % | Net edge pp | Net EV per trade [95 % CI] | SD bps |
+|---|---|---|---|---|---|---|---|---|---|
+| FLIP | ALL | 171 | 52.0 | 9.9 | 51.3 | 57.8 | -5.8 | -1.1 [-5.1, +2.9] | 25.7 |
+| FLIP | ASIA | 51 (<100) | 52.9 | 7.8 | 56.4 | 62.7 | -9.8 | -6.1 [-14.8, +1.2] | 29.2 |
+| FLIP | LONDON | 21 (<100) | 42.9 | 23.8 | 41.7 | 47.6 | -4.7 | +3.8 [-7.8, +16.6] | 28.8 |
+| FLIP | NY | 99 (<100) | 53.5 | 8.1 | 50.9 | 57.6 | -4.1 | +0.5 [-4.4, +5.5] | 22.5 |
+| NO-FLIP | ALL | 813 | 45.9 | 9.3 | 50.5 | 54.7 | -8.8 | -4.2 [-6.8, -1.6] | 38.2 |
+| NO-FLIP | ASIA | 246 | 48.8 | 6.1 | 48.0 | 52.3 | -3.5 | -2.0 [-6.4, +2.3] | 38.6 |
+| NO-FLIP | LONDON | 130 | 33.1 | 10.0 | 48.0 | 52.0 | -18.9 | -10.8 [-17.8, -3.8] | 39.4 |
+| NO-FLIP | NY | 437 | 48.1 | 11.0 | 52.7 | 56.9 | -8.8 | -3.4 [-6.8, +0.0] | 37.3 |
+| BALANCED | ALL | 713 | 46.7 | 9.5 | 50.5 | 54.4 | -7.7 | -3.9 [-6.9, -0.9] | 39.8 |
+| BALANCED | ASIA | 213 | 51.6 | 6.1 | 48.2 | 52.2 | -0.6 | -1.3 [-6.3, +3.6] | 40.7 |
+| BALANCED | LONDON | 112 | 34.8 | 8.9 | 47.9 | 51.7 | -16.8 | -10.0 [-17.8, -2.3] | 41.4 |
+| BALANCED | NY | 388 | 47.4 | 11.6 | 52.5 | 56.5 | -9.1 | -3.6 [-7.3, +0.2] | 38.7 |
+| WITH | ALL | 100 | 40.0 | 8.0 | 51.0 | 58.1 | -18.1 | -5.9 [-10.5, -1.3] | 22.6 |
+| WITH | ASIA | 33 (<100) | 30.3 | 6.1 | 45.4 | 53.0 | -22.7 | -6.7 [-12.6, -0.6] | 19.6 |
+| WITH | LONDON | 18 (<100) | 22.2 | 16.7 | 49.1 | 55.7 | -33.5 | -15.7 [-26.7, -5.5] | 22.7 |
+| WITH | NY | 49 (<100) | 53.1 | 6.1 | 55.3 | 62.3 | -9.2 | -1.8 [-8.1, +5.0] | 23.3 |
+| CONTROL | ALL | 201035 | 48.9 | 6.1 | 48.6 | 60.9 | -12.0 | -3.0 [-3.1, -2.9] | 13.6 |
+| CONTROL | ASIA | 65403 | 49.6 | 6.6 | 48.9 | 59.7 | -10.1 | -2.9 [-3.1, -2.8] | 15.1 |
+| CONTROL | LONDON | 41308 | 46.6 | 6.8 | 46.3 | 56.8 | -10.2 | -3.0 [-3.2, -2.9] | 15.3 |
+| CONTROL | NY | 94324 | 49.5 | 5.4 | 49.7 | 64.8 | -15.3 | -3.1 [-3.1, -3.0] | 11.6 |
+
+Holm across TFS-H1, TFS-H2, TFS-H3, familywise 0.05 (ruling A4L-9 (b)). Label = the census rule (TFS-10), copied.
+'Full-span Holm' = the step-down had not stopped AND the Holm-adjusted FULL CI excludes 0 (TFS-15: the best attainable result).
+
+| Test | Strata | A rows dropped (stratum without B) | FULL d [95 % CI] (nA/nB) | H1 half d (n) | H2 half d (n) | boot p | Holm alpha | Holm-adjusted FULL CI | Full-span Holm | Trailing-tercile FULL d (n) | Label |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| TFS-H1 | 6 | 0 | +2.8 [-2.2, +7.8] (171/813) | +5.0 [-2.1, +11.9] (71/408) | +0.8 [-6.5, +8.2] (100/405) | 0.2696 | 0.0167 | [-3.2, +8.9] | not passed | +4.0 [-1.3, +9.3] (168/804) | NO DIFFERENCE SHOWN |
+| TFS-H2 | 1 | 0 | -1.1 [-5.1, +2.9] (171) | -0.4 [-5.6, +4.8] (71) | -1.6 [-7.6, +4.0] (100) | 0.5948 | 0.0500 | [-5.1, +2.9] | not passed | -0.3 [-4.7, +3.9] (168) | NO DIFFERENCE SHOWN |
+| TFS-H3 | 18 | 0 | +2.0 [-2.1, +6.1] (171/201035) | +2.8 [-2.6, +8.1] (71/88584) | +1.5 [-4.5, +7.4] (100/90145) | 0.3206 | 0.0250 | [-2.6, +6.5] | not passed | +2.8 [-1.5, +7.1] (168/185311) | NO DIFFERENCE SHOWN |
+
+=== S3. Splits (TFS-H4): DESCRIPTIVE ONLY - CIs printed, no label, no significance claim; raw differences ===
+
+| Split | FLIP net EV [95 % CI] (n) | NO-FLIP net EV (n) | FLIP - NO-FLIP raw | CONTROL net EV (n) |
+|---|---|---|---|---|
+| period 2023H1 | -5.7 [-18.7, +10.6] (14) | -10.5 [-19.6, -1.6] (86) | +4.8 [-10.2, +23.6] | -3.2 [-3.4, -3.1] (26205) |
+| period 2023H2 | +4.2 [-9.2, +19.0] (10) | -0.7 [-7.9, +7.6] (71) | +4.9 [-11.6, +22.6] | -3.0 [-3.2, -2.9] (25362) |
+| period 2024H1 | -1.4 [-8.2, +5.1] (28) | -6.6 [-12.1, -1.0] (185) | +5.3 [-4.5, +14.1] | -3.1 [-3.2, -2.9] (27931) |
+| period 2024H2 | +2.0 [-5.1, +8.8] (35) | -1.0 [-7.7, +6.7] (142) | +2.9 [-7.2, +12.6] | -3.0 [-3.2, -2.8] (28398) |
+| period 2025H1 | -7.3 [-27.3, +6.0] (24) | +0.3 [-7.0, +8.0] (118) | -7.6 [-31.2, +9.5] | -3.0 [-3.2, -2.8] (29402) |
+| period 2025H2 | -2.6 [-10.2, +7.1] (35) | -4.5 [-9.5, +0.8] (100) | +1.9 [-6.9, +11.6] | -2.9 [-3.0, -2.7] (31765) |
+| period 2026H1* | +3.5 [-7.1, +14.8] (25) | -6.0 [-11.5, -0.1] (111) | +9.5 [-4.5, +24.3] | -2.9 [-3.1, -2.8] (31972) |
+| session ASIA | -6.1 [-14.7, +1.3] (51) | -2.0 [-6.2, +2.4] (246) | -4.1 [-14.1, +4.9] | -2.9 [-3.1, -2.8] (65403) |
+| session LONDON | +3.8 [-7.7, +16.9] (21) | -10.8 [-17.6, -4.0] (130) | +14.6 [+0.6, +30.0] | -3.0 [-3.2, -2.9] (41308) |
+| session NY | +0.5 [-4.3, +5.5] (99) | -3.4 [-6.8, -0.0] (437) | +3.9 [-2.0, +9.9] | -3.1 [-3.1, -3.0] (94324) |
+| side LONG (fade long) | +0.4 [-5.1, +5.6] (113) | -4.3 [-7.6, -0.9] (540) | +4.7 [-2.6, +11.4] | -3.1 [-3.2, -3.0] (100519) |
+| side SHORT (fade short) | -3.9 [-9.7, +2.3] (58) | -3.9 [-7.9, -0.1] (273) | +0.0 [-6.6, +7.0] | -2.9 [-3.1, -2.8] (100516) |
+| weekday | -2.3 [-6.9, +2.2] (145) | -4.7 [-7.5, -1.7] (703) | +2.3 [-3.4, +7.9] | -3.0 [-3.1, -2.9] (145583) |
+| weekend | +5.8 [-1.4, +13.4] (26) | -1.1 [-5.9, +3.8] (110) | +6.9 [-2.0, +16.1] | -3.1 [-3.2, -3.0] (55452) |
+| 500-trade window still fires at D: yes | -3.9 [-7.0, -0.7] (127) | -5.1 [-7.3, -2.8] (397) | +1.2 [-2.8, +5.1] | - |
+| 500-trade window still fires at D: no | +6.9 [-5.7, +18.3] (44) | -3.3 [-7.9, +1.4] (416) | +10.3 [-3.6, +23.4] | - |
+| episode also fired on the other side | -9.8 [-13.9, -4.8] (5) | -14.8 [-28.2, -0.8] (36) | +5.0 [-9.7, +19.5] | - |
+| anchor resets <= 5 | -0.5 [-4.6, +4.3] (90) | -4.9 [-8.1, -1.5] (267) | +4.5 [-1.2, +10.3] | - |
+| anchor resets 5 < x <= 20 | -4.7 [-14.1, +3.9] (51) | -3.2 [-7.2, +0.9] (253) | -1.5 [-11.9, +8.5] | - |
+| anchor resets > 20 | +3.2 [-5.4, +11.3] (30) | -4.4 [-9.7, +1.0] (293) | +7.5 [-2.1, +17.0] | - |
+
+| Class | Net EV [95 % CI] (n) | minus FLIP, raw |
+|---|---|---|
+| BALANCED | -3.9 [-6.8, -1.0] (713) | -2.8 [-8.0, +2.5] |
+| WITH | -5.9 [-10.5, -1.3] (100) | -4.8 [-10.9, +1.5] |
+
+| Trailing 90-day class (primary population) | Net EV [95 % CI] (n) |
+|---|---|
+| FLIP | -0.3 [-4.6, +3.8] (168) |
+| BALANCED | -4.3 [-7.1, -1.4] (706) |
+| WITH | -5.5 [-10.0, -0.8] (98) |
+| too_few_trailing_ref | +3.3 [-10.8, +18.8] (12) |
+
+| Variant (own D, entry, levels) | FLIP net EV (n) | NO-FLIP net EV (n) | FLIP - NO-FLIP raw |
+|---|---|---|---|
+| Q0L30 terciles | -4.6 [-8.7, -0.3] (150) | -4.2 [-6.7, -1.6] (808) | -0.5 [-5.6, +4.6] |
+| Q0L120 terciles | -1.1 [-4.6, +2.4] (189) | -5.5 [-8.2, -2.7] (800) | +4.4 [-0.4, +9.0] |
+| Q30L60 terciles | -5.3 [-8.9, -1.8] (170) | -4.9 [-7.4, -2.4] (813) | -0.4 [-4.8, +4.0] |
+| TFI30 terciles | -3.8 [-7.5, -0.0] (303) | -2.1 [-4.7, +0.3] (688) | -1.7 [-6.0, +2.6] |
+| TFI30 engine +-0.15 | -3.0 [-6.2, +0.2] (480) | -2.3 [-5.3, +0.6] (511) | -0.7 [-5.1, +3.7] |
+
+TFS-H4: OLS slope of net EV (bps) on fade-signed I (x +1 LONG event, x -1 SHORT event), primary population n 984: +2.2 [-1.7, +6.0] bps per unit I
+| Fade-signed I tercile (edges -0.0595 / 0.2528) | Net EV [95 % CI] (n) |
+|---|---|
+| low | -2.9 [-6.7, +1.1] (328) |
+| mid | -8.5 [-13.0, -3.9] (328) |
+| high | +0.5 [-2.8, +3.8] (328) |
+
+| Arm | n | target reason shares | stop reason shares | target bps p50 | stop bps p50 | arm-c target / stop bps p50 | share target < min-move floor 8.0 bps (not applied) |
+|---|---|---|---|---|---|---|---|
+| FLIP | 171 | NEAREST_HVN_ABOVE 0.39 FALLBACK_ATR 0.25 NEAREST_HVN_BELOW 0.19 SWING_HIGH_5M 0.12 SWING_LOW_5M 0.04 POC 0.01 | FALLBACK_ATR 0.60 STOP_CLAMPED 0.30 SWING_STOP 0.11 | 18.7 | 20.0 | 22.7 / 21.0 | 0.193 |
+| NO-FLIP | 813 | NEAREST_HVN_ABOVE 0.44 NEAREST_HVN_BELOW 0.22 FALLBACK_ATR 0.21 SWING_HIGH_5M 0.08 SWING_LOW_5M 0.03 POC 0.02 | FALLBACK_ATR 0.77 STOP_CLAMPED 0.15 SWING_STOP 0.08 | 25.9 | 30.3 | 32.0 / 32.2 | 0.151 |
+| CONTROL | 201035 | FALLBACK_ATR 0.31 SWING_HIGH_5M 0.18 SWING_LOW_5M 0.17 NEAREST_HVN_BELOW 0.17 NEAREST_HVN_ABOVE 0.16 POC 0.01 | STOP_CLAMPED 0.73 FALLBACK_ATR 0.16 SWING_STOP 0.11 | 9.2 | 10.0 | 10.6 / 10.7 | 0.443 |
+
+=== S2c. DESCRIPTIVE: ATR-fallback geometry (spec section 4.8 / TFS-8 (c)), house net EV per trade ===
+fee 3.0 bps round trip (maker/maker); windows NY 15 min, ASIA/LONDON 45 min; bootstrap 10000 resamples of whole UTC days, seed 20261005
+
+| Arm | Session | n | Success % | Timeout % | Gross breakeven % | Net breakeven % | Net edge pp | Net EV per trade [95 % CI] | SD bps |
+|---|---|---|---|---|---|---|---|---|---|
+| FLIP | ALL | 171 | 51.5 | 7.6 | 49.8 | 55.8 | -4.3 | +0.1 [-4.4, +4.5] | 29.1 |
+| FLIP | ASIA | 51 (<100) | 54.9 | 3.9 | 56.1 | 62.2 | -7.3 | -5.1 [-14.9, +3.8] | 33.7 |
+| FLIP | LONDON | 21 (<100) | 47.6 | 14.3 | 44.4 | 50.1 | -2.5 | +2.6 [-9.5, +15.2] | 28.9 |
+| FLIP | NY | 99 (<100) | 50.5 | 8.1 | 47.8 | 53.8 | -3.3 | +2.3 [-3.0, +7.6] | 26.2 |
+| NO-FLIP | ALL | 813 | 41.3 | 11.6 | 49.3 | 53.2 | -11.8 | -3.5 [-6.6, -0.3] | 43.9 |
+| NO-FLIP | ASIA | 246 | 55.3 | 4.1 | 56.1 | 60.7 | -5.4 | -1.9 [-6.9, +2.8] | 38.9 |
+| NO-FLIP | LONDON | 130 | 26.9 | 14.6 | 44.4 | 47.9 | -20.9 | -10.0 [-17.7, -2.4] | 46.7 |
+| NO-FLIP | NY | 437 | 37.8 | 14.9 | 47.8 | 51.4 | -13.7 | -2.4 [-6.8, +2.0] | 45.6 |
+| BALANCED | ALL | 713 | 42.8 | 11.9 | 49.3 | 53.0 | -10.2 | -2.8 [-6.2, +0.7] | 46.0 |
+| BALANCED | ASIA | 213 | 59.2 | 4.2 | 56.1 | 60.4 | -1.2 | -0.8 [-6.6, +4.4] | 41.0 |
+| BALANCED | LONDON | 112 | 28.6 | 13.4 | 44.4 | 47.7 | -19.1 | -8.8 [-17.4, -0.1] | 49.3 |
+| BALANCED | NY | 388 | 37.9 | 15.7 | 47.8 | 51.3 | -13.4 | -2.2 [-7.1, +2.8] | 47.5 |
+| WITH | ALL | 100 | 31.0 | 9.0 | 49.2 | 55.6 | -24.6 | -8.1 [-13.0, -3.2] | 24.0 |
+| WITH | ASIA | 33 (<100) | 30.3 | 3.0 | 56.1 | 64.6 | -34.3 | -8.5 [-14.9, -1.6] | 20.6 |
+| WITH | LONDON | 18 (<100) | 16.7 | 22.2 | 44.4 | 49.9 | -33.3 | -17.4 [-28.2, -7.0] | 22.9 |
+| WITH | NY | 49 (<100) | 36.7 | 8.2 | 47.8 | 53.6 | -16.9 | -4.5 [-11.8, +3.0] | 25.6 |
+| CONTROL | ALL | 201035 | 47.9 | 5.9 | 49.7 | 61.6 | -13.8 | -3.0 [-3.0, -2.9] | 14.5 |
+| CONTROL | ASIA | 65403 | 54.2 | 4.0 | 56.1 | 67.6 | -13.3 | -3.1 [-3.3, -3.0] | 14.9 |
+| CONTROL | LONDON | 41308 | 41.6 | 8.7 | 44.4 | 53.8 | -12.2 | -2.8 [-3.0, -2.7] | 17.6 |
+| CONTROL | NY | 94324 | 46.2 | 5.8 | 47.8 | 61.8 | -15.6 | -2.9 [-3.0, -2.8] | 12.7 |
+
+| Test | FULL d [95 % CI] (n) | H1 half d (n) | H2 half d (n) | boot p | (descriptive: no Holm, no label) |
+|---|---|---|---|---|---|
+| TFS-H1 | +3.1 [-2.4, +8.7] (171/813) | +2.1 [-6.1, +10.0] (71/408) | +3.7 [-4.0, +11.6] (100/405) | 0.2594 | - |
+| TFS-H2 | +0.1 [-4.3, +4.5] (171) | -1.4 [-7.4, +4.7] (71) | +1.1 [-5.4, +7.1] (100) | 0.9794 | - |
+| TFS-H3 | +3.2 [-1.3, +7.5] (171/201035) | +1.8 [-4.5, +7.9] (71/88584) | +4.1 [-2.1, +10.3] (100/90145) | 0.1536 | - |
+
+=== S2f. DESCRIPTIVE: fixed-horizon mark at the window end, net of fee (from the arm-d entries) ===
+fee 3.0 bps round trip (maker/maker); windows NY 15 min, ASIA/LONDON 45 min; bootstrap 10000 resamples of whole UTC days, seed 20261005
+
+| Test | FULL d [95 % CI] (n) | H1 half d (n) | H2 half d (n) | boot p | (descriptive: no Holm, no label) |
+|---|---|---|---|---|---|
+| TFS-H1 | -6.2 [-15.7, +3.1] (171/813) | -8.5 [-25.5, +7.9] (71/408) | -3.2 [-14.9, +8.0] (100/405) | 0.1930 | - |
+| TFS-H2 | -7.0 [-15.1, +0.5] (171) | -10.7 [-26.5, +3.4] (71) | -4.4 [-12.6, +3.4] (100) | 0.0694 | - |
+| TFS-H3 | -4.2 [-12.3, +3.3] (171/201035) | -7.7 [-23.9, +6.5] (71/88584) | -1.6 [-9.8, +6.2] (100/90145) | 0.3072 | - |
+
+runtime 874 s
