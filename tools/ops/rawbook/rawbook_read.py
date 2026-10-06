@@ -87,7 +87,8 @@ def binom_two_sided(k, n):
         return 1.0
     lo = min(k, n - k)
     tail = sum(math.comb(n, i) for i in range(lo + 1))
-    return min(1.0, 2.0 * tail / (2 ** n))
+    # Integer true division: exact for large n (2.0 * tail overflows a float above n ~ 1,000).
+    return min(1.0, (2 * tail) / (2 ** n))
 
 
 def median(xs):
@@ -520,6 +521,8 @@ def selftest(mutate):
     # Statistics primitives
     check("sign test n=10 k=0 p", "%.6f" % binom_two_sided(0, 10), "%.6f" % (2.0 / 1024))
     check("sign test n=0 p", binom_two_sided(0, 0), 1.0)
+    check("sign test n=3000 k=1500 p (no float overflow)", binom_two_sided(1500, 3000), 1.0)
+    check("sign test n=2000 k=900 p < 1e-5", binom_two_sided(900, 2000) < 1e-5, True)
     check("floor: pullFrac(2000, 100)", pull_frac(2000, 100), 0.4)
     check("no floor: pullFrac(6000, 8000)", pull_frac(6000, 8000), 0.75)
     s = stats([(6000, 8000, 7000, 9000),      # A 0.75 PASS -> B 0.778 VETO, higher
