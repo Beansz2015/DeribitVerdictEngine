@@ -911,3 +911,10 @@ No choice here touches `settings.json`, scoring, a rendered value or a CSV schem
 - **All arms:** no forming bar (completed bars only); levels at D, not at a bar close; tape candles in place of venue candles (agreement above).
 - **Arm d only:** nothing else. Funding, OI and book feed no placed level.
 - **Arm c:** unchanged from spec section 4.8.
+
+### 15.6 Interruption of the registered run — recorded 2026-10-06, before it was resumed
+
+- The one registered run (`python tools/ops/liq_tradeflow_read.py --run`, code at `b41e0e2`, no changes) started at 2026-10-06 ~17:53 GMT+8. The Claude Code session that launched it ended, and the process was killed (exit code 4) during phase S.
+- **What it had printed, and I saw:** phases A, B, L and C complete (`H-3` PASS again; all entry checks clean; 0 no-trade drops). The drop table (arm d: FLIP 0, NO-FLIP 0, CONTROL 5 "few_candles"). The TFS-H3 ATR tercile edges. **The first 11 rows of the arm explanation table:** FLIP (ALL and per session), NO-FLIP (ALL and per session), BALANCED (ALL, ASIA, LONDON). Example: FLIP ALL net EV −1.1 [−5.1, +2.9] bps, n 171; NO-FLIP ALL −4.2 [−6.8, −1.6] bps, n 813.
+- **What was not printed:** no TFS-H1, TFS-H2 or TFS-H3 statistic, no Holm result, no label, no split.
+- **What happens next:** the same command, same code (`b41e0e2`), same seed, unchanged settings. It is resumed, not re-run with any change: the seeded bootstrap makes it deterministic. The resumed output must reproduce the 11 printed rows exactly, and the result section says whether it did.
