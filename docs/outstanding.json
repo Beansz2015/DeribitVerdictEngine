@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-06T15:10Z",
+  "updated_utc": "2026-10-06T15:35Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -9,13 +9,18 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 16 commits ahead of origin: trade-flow study session 2 (tools, result: no difference shown), pane updates (no engine code)",
+      "meaning": "Push master — 18 commits ahead of origin: trade-flow and raw-book session-2 records, pane updates (no engine code)",
       "since": "2026-10-06"
     },
     {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
+    },
+    {
+      "kind": "ruling",
+      "meaning": "Raw-book test gave NO VERDICT (29 mismatches unclassifiable: the probe logged only a counter). Instrumented 24 h re-run before 2026-10-14 (orchestrator and agent), accept class-level evidence, or wait until after the holiday?",
+      "since": "2026-10-06"
     }
   ],
   "in_progress": [
@@ -26,12 +31,6 @@
       "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
       "doc": "docs/aws-collector-deploy-checklist.md",
       "anchor": "§5 deploy ledger"
-    },
-    {
-      "what": "Raw order-book absorption test, session 2: diagnose the 29 prior book mismatches first; the pre-registered read only if all are comparison-timing artefacts",
-      "where": "agent (orchestrator-dispatched)",
-      "started_utc": "2026-10-06T15:05Z",
-      "check": "the orchestrator relays its report"
     }
   ],
   "dated": [

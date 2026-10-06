@@ -1,0 +1,38 @@
+{
+ "rev": "b8c1ccba51d0b8c5a3b07c3eceaf85c9d5437153",
+ "rev7": "b8c1ccb",
+ "stamp_utc": "20261006T1530Z",
+ "builder": "orchestrator seat",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/raw-book-absorption-test-spec.md|11.6-orch@b8c1ccb",
+   "question": "A 24 h probe comparing a rebuilt raw order book with 100 ms snapshots logged 29 unexplained 'prior' mismatches (0 of 156,319 exact checks mismatched) but kept only a counter, so no mismatch can be classified as a timing artefact or a rebuild error. A ruling requires all to be shown artefacts before any verdict. What now?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "add per-mismatch logging and a reconnect-reset fix, re-run 24 h on a temporary cloud box before 2026-10-14, then diagnose and read",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "accept the class-level evidence and run the read on the existing data, relaxing the ruling",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "leave it until after 2026-11-25",
+     "src": "docs/raw-book-absorption-test-spec.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a) records the per-mismatch evidence the ruling requires and fixes a probe defect; it fits before the 6-week holiday (about 1 build session + 24 h + 1 read). (b) gives up the guarantee the ruling set; (c) leaves the absorption build gated for 7+ weeks.",
+   "question_src": "docs/raw-book-absorption-test-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-test-spec.md"
+   ],
+   "state_rev": "b8c1ccba51d0b8c5a3b07c3eceaf85c9d5437153",
+   "provenance": "live_recommendation"
+  }
+ ]
+}
