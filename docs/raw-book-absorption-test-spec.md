@@ -4,6 +4,8 @@
 
 ⛔ **Session 2, 2026-10-06 (UTC): NO VERDICT.** The run ended with 29 "prior" book mismatches. The diagnosis (`raw-book-absorption-test-spec.md` §11) cannot show any of the 29 to be a fallback-comparison artefact, because the probe recorded counters only, not the mismatching books. The trader's 2026-10-06 ruling therefore stops the read. The registered read was NOT run. Results: [`raw-book-absorption-test-results-2026-10-06.md`](raw-book-absorption-test-results-2026-10-06.md).
 
+✅ **Session 3, 2026-10-06 (UTC): READ RUN under the quarantine ruling (option (d), `raw-book-absorption-test-spec.md` §0 box). Verdict: H-NET CONFIRMED, H-POST REFUTED.** 1,418 A-B pairs after the quarantine dropped 25; 723 qualifying. Output and checks: `raw-book-absorption-test-spec.md` §12.
+
 **Source of the test:** the surviving half of the "REFUTED ON DIRECTION 2026-08-20" row — [`trader-tick-queue-archive.md` §C, `trim-2026-09-14-47`](trader-tick-queue-archive.md#trim-2026-09-14-47) and the live row in `docs/trader-tick-queue.md` §2. **Key scope:** the read-only key, `HH-2` (the read-only-key ruling, widened 2026-09-29) in [`history-host-and-raw-channel-read-2026-09-28.md`](history-host-and-raw-channel-read-2026-09-28.md) §4.
 
 **Class:** read-only research. No `settings.json` change, no scoring change, no collector contact, no `Core/` or `UI/` edit.
@@ -393,3 +395,152 @@ Seat's read: (a). It records more and needs no relaxed bar. (b) gives up a guara
 - Whether the Deribit raw book channel delivers several changes under one `change_id`: not measurable from this data.
 - The probe's convenience pair counts in `summary_*.txt`: seen, not re-derived, and not used.
 - Harness 6 (the decision-bias tripwire) was not run on the options in `raw-book-absorption-test-spec.md` §11.6, because the seat does not decide them.
+
+---
+
+## 12. Read result (quarantined), 2026-10-06 (UTC)
+
+**Under the trader's ruling of 2026-10-06, option (d): the quarantine box at the top of `raw-book-absorption-test-spec.md` §0.** Start commit `a0d5ae7`. Run once.
+
+### 12.1 Instrument and order of work
+
+| Step | Record |
+|---|---|
+| Script | `tools/ops/rawbook/rawbook_read.py`, committed at `65889df` **before** it read any `pullFrac` value. Its header fixes every application detail the spec leaves open (quarantine overlap, PROBE_ handling, tolerances, verdict tie rule) |
+| Fix before the read | `3707774`: the exact binomial p overflowed a float at n above ~1,000. The first run crashed inside the last secondary, before it printed anything. No rule changed |
+| Independence | The script pairs episodes from `episodes_*.csv` itself. It does not call or copy the probe's `AlignedPairs_Locked` |
+| Selftest | `python tools/ops/rawbook/rawbook_read.py --selftest` → `SELFTEST PASS (0 failed)` |
+| Mutation | `--selftest --mutate per-episode` (quarantine applied to episodes BEFORE pairing) → `kept pairs are exactly case 4 (L4) want L4 got L3,L4 FAIL` · `SELFTEST FAIL (1 failed)`. The per-episode filter removes a quarantined B fragment and turns a two-overlap A episode into a false pair |
+| Data | `C:\DeribitData\rawbook-run1\out\`. Archive `rawbook-out.tgz` MD5 `7f9e2a5dd70da73c7929f0580e086ebd` (re-run this session; equals the brief's S3 ETag). `episodes_*.csv` and `samples_*.csv` in `out\` are byte-identical to the archive copies (MD5 compared) |
+| Command | `python tools/ops/rawbook/rawbook_read.py --run-dir C:/DeribitData/rawbook-run1/out --windows docs/audits/proofs/raw-book-quarantine-2026-10-06/mismatch_windows.csv` |
+
+### 12.2 Output, verbatim
+
+⚠ One cosmetic defect: in the S5 block (A vs C), the label "B higher" means "C higher". The numbers are the A-vs-C numbers.
+
+```
+==== raw-book absorption read, quarantined (ruling 2026-10-06 option (d)) ====
+episodes file episodes_20261005-132038.csv | windows 28 | max_pull_frac 0.75 | floor 5000
+check P3: max |recomputed pullFrac - CSV pull_frac| = 5.00e-07 (CSV prints 6 decimals)
+gens [1, 2] (escalation if > 20)
+
+-- episode exposure to the quarantine windows (all rows / non-PROBE rows) --
+arm A: 89 of 3565 rows overlap a window | non-PROBE 89 of 3565
+arm B: 164 of 6874 rows overlap a window | non-PROBE 164 of 6874
+arm C: 164 of 6874 rows overlap a window | non-PROBE 164 of 6874
+arm A informative episodes: 1979 (not overlapping a window: 1936)
+
+-- A-B aligned pairs: before quarantine 1443, dropped 25, kept 1418 --
+   dropped by cause: A only 0 | B only 0 | both 25
+   session   before  dropped    A-ovl    B-ovl     kept
+   ASIA         332        3        3        3      329
+   LONDON       243       13       13       13      230
+   NY           868        9        9        9      859
+
+-- A-C aligned pairs: before quarantine 1226, dropped 21, kept 1205 --
+   dropped by cause: A only 0 | C only 0 | both 21
+   session   before  dropped    A-ovl    C-ovl     kept
+   ASIA         288        3        3        3      285
+   LONDON       217       11       11       11      206
+   NY           721        7        7        7      714
+
+check E1: aligned A-B / arm A informative = 1443/1979 = 0.729 before quarantine, 1418/1936 = 0.732 after (stop if < 0.5)
+fragmentation (arm A informative, not in a window): overlapping B episodes 0: 3 | 1: 1419 | 2+: 514 (2+ share 26.5 %)
+
+== PRIMARY: A vs B aligned pairs, quarantined ==
+
+  pooled     n=1418 | S1 (A<=1, n=723): B higher 585, lower 63, equal 75, sign p=5.78e-107
+             S2 flips: PASS->VETO 277 (19.5 %), VETO->PASS 76 (5.4 %), McNemar p=5.54e-28
+             S3 balance median -0.0461 (n=1349 nonzero denominators, 8 negative) | median |dPF| all 0.5177, A<=1 0.3339 | median dPullLB 56625 dPostLB 51640
+             S4 A exactly 1.000: 12, B partner also 1.000: 3 (25.0 %)
+  floored    n=341 | S1 (A<=1, n=153): B higher 85, lower 7, equal 61, sign p=3.85e-18
+             S2 flips: PASS->VETO 58 (17.0 %), VETO->PASS 21 (6.2 %), McNemar p=3.76e-05
+             S3 balance median -0.0004 (n=286 nonzero denominators, 1 negative) | median |dPF| all 1.5640, A<=1 0.2083 | median dPullLB 19450 dPostLB 16070
+             S4 A exactly 1.000: 0, B partner also 1.000: 0
+  unfloored  n=1077 | S1 (A<=1, n=570): B higher 500, lower 56, equal 14, sign p=4.05e-90
+             S2 flips: PASS->VETO 219 (20.3 %), VETO->PASS 55 (5.1 %), McNemar p=2.44e-24
+             S3 balance median -0.0535 (n=1063 nonzero denominators, 7 negative) | median |dPF| all 0.4389, A<=1 0.3461 | median dPullLB 74190 dPostLB 65100
+             S4 A exactly 1.000: 12, B partner also 1.000: 3 (25.0 %)
+rows holding: ['H-NET CONFIRMED, H-POST REFUTED']
+PRIMARY VERDICT: H-NET CONFIRMED, H-POST REFUTED
+
+== S5: A vs C aligned pairs, quarantined (S1 and S3 are the registered statistics) ==
+
+  pooled     n=1205 | S1 (A<=1, n=618): B higher 493, lower 52, equal 73, sign p=3.82e-91
+             S2 flips: PASS->VETO 242 (20.1 %), VETO->PASS 65 (5.4 %), McNemar p=3.92e-25
+             S3 balance median -0.0520 (n=1138 nonzero denominators, 9 negative) | median |dPF| all 0.5387, A<=1 0.3454 | median dPullLB 57690 dPostLB 51600
+             S4 A exactly 1.000: 11, B partner also 1.000: 3 (27.3 %)
+  floored    n=303 | S1 (A<=1, n=145): B higher 79, lower 7, equal 59, sign p=1.52e-16
+             S2 flips: PASS->VETO 55 (18.2 %), VETO->PASS 19 (6.3 %), McNemar p=3.38e-05
+             S3 balance median 0.0000 (n=250 nonzero denominators, 1 negative) | median |dPF| all 1.2000, A<=1 0.2083 | median dPullLB 17410 dPostLB 15660
+             S4 A exactly 1.000: 0, B partner also 1.000: 0
+  unfloored  n=902 | S1 (A<=1, n=473): B higher 414, lower 45, equal 14, sign p=8.19e-76
+             S2 flips: PASS->VETO 187 (20.7 %), VETO->PASS 46 (5.1 %), McNemar p=2.35e-21
+             S3 balance median -0.0593 (n=888 nonzero denominators, 8 negative) | median |dPF| all 0.4585, A<=1 0.3781 | median dPullLB 77390 dPostLB 67125
+             S4 A exactly 1.000: 11, B partner also 1.000: 3 (27.3 %)
+
+== SECONDARY S-CONCAT (A vs summed overlapping B), quarantined: kept 1933, dropped 43 ==
+
+  pooled     n=1933 | S1 (A<=1, n=1032): B higher 830, lower 99, equal 103, sign p=1.62e-144
+             S2 flips: PASS->VETO 400 (20.7 %), VETO->PASS 115 (5.9 %), McNemar p=6.58e-38
+             S3 balance median -0.0415 (n=1841 nonzero denominators, 29 negative) | median |dPF| all 0.4919, A<=1 0.3344 | median dPullLB 63000 dPostLB 57820
+             S4 A exactly 1.000: 18, B partner also 1.000: 3 (16.7 %)
+  floored    n=425 | S1 (A<=1, n=198): B higher 105, lower 11, equal 82, sign p=2.11e-20
+             S2 flips: PASS->VETO 69 (16.2 %), VETO->PASS 27 (6.4 %), McNemar p=2.15e-05
+             S3 balance median 0.0000 (n=353 nonzero denominators, 3 negative) | median |dPF| all 1.4142, A<=1 0.1226 | median dPullLB 18010 dPostLB 15900
+             S4 A exactly 1.000: 0, B partner also 1.000: 0
+  unfloored  n=1508 | S1 (A<=1, n=834): B higher 725, lower 88, equal 21, sign p=2.07e-125
+             S2 flips: PASS->VETO 331 (21.9 %), VETO->PASS 88 (5.8 %), McNemar p=3.25e-34
+             S3 balance median -0.0482 (n=1488 nonzero denominators, 26 negative) | median |dPF| all 0.4380, A<=1 0.3523 | median dPullLB 81775 dPostLB 73020
+             S4 A exactly 1.000: 18, B partner also 1.000: 3 (16.7 %)
+rows holding: ['H-NET CONFIRMED, H-POST REFUTED'] | S-CONCAT verdict by the same rule: H-NET CONFIRMED, H-POST REFUTED
+
+== SECONDARY S-INSTANT (last co-active sample per arm A episode), quarantined: kept 2479, dropped 56 (rows unmapped 0, PROBE_ skipped 0) ==
+
+  pooled     n=2479 | S1 (A<=1, n=1622): B higher 1143, lower 86, equal 393, sign p=2.31e-236
+             S2 flips: PASS->VETO 595 (24.0 %), VETO->PASS 114 (4.6 %), McNemar p=2.27e-79
+             S3 balance median -0.0086 (n=2155 nonzero denominators, 45 negative) | median |dPF| all 0.4666, A<=1 0.2915 | median dPullLB 34100 dPostLB 31190
+             S4 A exactly 1.000: 13, B partner also 1.000: 4 (30.8 %)
+  floored    n=1116 | S1 (A<=1, n=800): B higher 433, lower 16, equal 351, sign p=1.42e-106
+             S2 flips: PASS->VETO 294 (26.3 %), VETO->PASS 48 (4.3 %), McNemar p=2.89e-44
+             S3 balance median 0.0000 (n=824 nonzero denominators, 9 negative) | median |dPF| all 0.6553, A<=1 0.2000 | median dPullLB 10535 dPostLB 6930
+             S4 A exactly 1.000: 0, B partner also 1.000: 0
+  unfloored  n=1363 | S1 (A<=1, n=822): B higher 710, lower 70, equal 42, sign p=3.34e-134
+             S2 flips: PASS->VETO 301 (22.1 %), VETO->PASS 66 (4.8 %), McNemar p=5.72e-37
+             S3 balance median -0.0190 (n=1331 nonzero denominators, 36 negative) | median |dPF| all 0.4083, A<=1 0.3236 | median dPullLB 58900 dPostLB 53650
+             S4 A exactly 1.000: 13, B partner also 1.000: 4 (30.8 %)
+rows holding: ['H-NET CONFIRMED, H-POST REFUTED'] | S-INSTANT verdict by the same rule: H-NET CONFIRMED, H-POST REFUTED
+
+SUMMARY: primary H-NET CONFIRMED, H-POST REFUTED | S-CONCAT H-NET CONFIRMED, H-POST REFUTED | S-INSTANT H-NET CONFIRMED, H-POST REFUTED
+```
+
+### 12.3 Verdict against the registered rule (`RBA-4`, `raw-book-absorption-test-spec.md` §5)
+
+**PRIMARY VERDICT: H-NET CONFIRMED, H-POST REFUTED.** Both secondaries give the same verdict, so the fragmentation share (26.5 % of clean informative arm A episodes overlap 2+ arm B episodes) does not change the answer.
+
+| Registered condition | Required | Measured (A vs B, pooled, quarantined) | Holds? |
+|---|---|---|---|
+| Minimum count | ≥ 200 aligned pairs with arm A `pullFrac` ≤ 1 | 723 | ✅ |
+| Escalation: aligned share | aligned ≥ half of arm A informative | 0.729 before, 0.732 after the quarantine | ✅ no stop |
+| Escalation: resets | `gen` count ≤ 20 | 2 | ✅ no stop |
+| H-NET part 1 | PASS→VETO > VETO→PASS (p < 0.01) OR `S1` higher > lower (p < 0.01) | Flips 277 vs 76, p = 5.5e-28 · `S1` 585 vs 63, p = 5.8e-107 | ✅ both arms of the OR |
+| H-NET part 2 | `S3` median within ±0.10 | −0.046 | ✅ |
+| H-POST | VETO→PASS > PASS→VETO AND `S1` lower > higher AND `S3` > 0.10 | All three fail | ❌ |
+| NO MATERIAL DIFFERENCE | both flip rates < 5 % AND median \|Δ`pullFrac`\| < 0.05 | 19.5 % and 5.4 %; median 0.518 | ❌ |
+
+### 12.4 What the read does NOT fit — reported, not used to change the verdict
+
+| Item | H-NET (pure netting) predicts | Measured | Reading |
+|---|---|---|---|
+| `S4`: 1.000 rows | Stay at 1.000 (partition-invariant) | 3 of 12 stay (25 %) | Pure netting does not hold on these rows. n = 12 is small |
+| VETO→PASS flips | None | 76 (5.4 %, above the 5 % "material" bar) | A residual that netting cannot produce |
+| `S5`: arm C vs arm B | — | C ≈ B on every statistic (`S1` 493/52 vs 585/63; `S3` −0.052 vs −0.046; VETO→PASS 5.4 % both) | Trade granularity does not drive the result or the residual |
+
+- The residual points to the mask differences named in `raw-book-absorption-test-spec.md` §2, not to trade timing. ⚠ **Not verified:** no statistic in the registration isolates the mask.
+- The direction is not in doubt. The raw feed raises `pullLB` and `postLB` by similar amounts (median Δ 56,625 vs 51,640 USD), and raw `pullFrac` reads higher in 585 of 648 non-equal pairs.
+
+### 12.5 What this session did not do
+
+- No sensitivity line with the quarantined pairs included. The spec registered none, so none was computed.
+- Harness 6 (the decision-bias tripwire) was not run: this session applied a registered rule and made no new recommendation on a decision with options.
+- The probe's convenience pair count (1,443 in `status_latest.txt`) was seen in session 2. The independent script reproduces it exactly (1,443 before the quarantine). That is the only use made of it.
