@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T20:10Z",
-  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — S1R-1/S1R-2 ruled (tick row removed, post-holiday rows added)",
+  "updated_utc": "2026-10-07T20:25Z",
+  "updated_by": "review seat 2026-10-07/08, Opus 5.5 - adversarial review of the indicator review pack started",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -11,11 +11,6 @@
       "kind": "push",
       "meaning": "Push master — 10 commits ahead of origin: the raw-book measure spec, the 2026-10-07 handover, the absorption Stage 1 read, pane updates (no engine code)",
       "since": "2026-10-07"
-    },
-    {
-      "kind": "go",
-      "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
-      "since": "2026-10-02"
     },
     {
       "kind": "ruling",
@@ -28,6 +23,12 @@
     }
   ],
   "in_progress": [
+    {
+      "what": "Adversarial review of the indicator review pack (fresh seat): attack its order and classes, answer its questions, check its carried claims",
+      "where": "local seat",
+      "started_utc": "2026-10-07T20:10Z",
+      "doc": "docs/indicator-calibration-review-2026-10-02.md"
+    },
     {
       "what": "Collector on AWS, instance 41a3e894 (watchdog restart during a venue halt); read-backs until 2026-10-13",
       "where": "AWS box i-0d6c133058876273e",
@@ -65,12 +66,6 @@
     }
   ],
   "next_up": [
-    {
-      "what": "Adversarial review of the indicator review pack, in a fresh seat — attack its order and classes",
-      "doc": "docs/indicator-calibration-review-2026-10-02.md",
-      "anchor": "§6–§9",
-      "model": "Opus 5.5 or Fable 5.1, high"
-    },
     {
       "what": "After 2026-11-25: first fetch, closing history comparison, then the stage-4 pass rule (run dates, 14 days)",
       "doc": "docs/history-data-store-build-spec-back.md",
