@@ -1,0 +1,72 @@
+{
+ "rev": "4c0a159f32a08b0f233145633d31deaa3c850484",
+ "rev7": "4c0a159",
+ "stamp_utc": "20261007T1814Z",
+ "builder": "seat 2026-10-07 Stage 1 read",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/absorption-stage1-read-2026-10-07.md|S1R-1@4c0a159",
+   "question": "A live instrument shows that about half of the order flow the absorption tracker drops is lost because a watched price level falls outside the 10-level order book the tracker sees, although the level still exists. A separate approved change will rebuild the full-depth book from a raw feed but still hand the tracker only 10 levels, and a 24 h probe measured that this makes the same kind of close 2.7 times more frequent. What should the follow-up fix be?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "hysteresis: keep the episode open while the level is out of view, with the level's size unmeasurable during that time (freeze or skip it)",
+     "src": "docs/absorption-stage1-read-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "give the tracker more than 10 levels from the full-depth book the raw-feed change already rebuilds; no new subscription, the other order-flow indicator is untouched; unmeasured, so run a pre-registered probe arm before any build",
+     "src": "docs/absorption-stage1-read-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "subscribe a 20-level 100 ms book feed; the other order-flow indicator reads the same ladder and would change too",
+     "src": "docs/absorption-stage1-read-2026-10-07.md"
+    },
+    {
+     "label": "(d)",
+     "text": "decide only after the raw-feed change ships, from a fresh read of this instrument on the raw feed",
+     "src": "docs/absorption-stage1-read-2026-10-07.md"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "(b) removes the cause rather than bridging it, and the raw-feed change alone makes the cause worse. (a) reports a size nobody can see. (c) moves another indicator. (d) defers into a dataset boundary that (b) avoids paying twice.",
+   "question_src": "docs/absorption-stage1-read-2026-10-07.md",
+   "rationale_src": [
+    "docs/absorption-stage1-read-2026-10-07.md"
+   ],
+   "state_rev": "4c0a159f32a08b0f233145633d31deaa3c850484",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/absorption-stage1-read-2026-10-07.md|S1R-2@4c0a159",
+   "question": "About 27 % of absorption episode closes, carrying 31 % of the dropped flow, happen when the best price trades through the watched level without a break-tolerance breach. Flow arriving after such a close is classed as pressing, not a break, by the tracker's own trade rule. What should happen to this close reason?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "write a derivation of what the level's size trajectory means while the touch is through the level, then decide",
+     "src": "docs/absorption-stage1-read-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "treat these closes as legitimate and change nothing for this reason",
+     "src": "docs/absorption-stage1-read-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "add a fix option now: a crossing without a break-tolerance breach does not close the episode",
+     "src": "docs/absorption-stage1-read-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The evidence says the crossing is not a break by the tracker's own rule, but keeping an episode open across a crossed touch measures the level from the wrong side of the book. That needs a derivation, not a guess.",
+   "question_src": "docs/absorption-stage1-read-2026-10-07.md",
+   "rationale_src": [
+    "docs/absorption-stage1-read-2026-10-07.md"
+   ],
+   "state_rev": "4c0a159f32a08b0f233145633d31deaa3c850484",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

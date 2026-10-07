@@ -1,5 +1,7 @@
 # `D-6d` — the absorption counting gap · SPEC
 
+> ## ✅ STAGE 1 READ DONE 2026-10-07 (UTC): [`absorption-stage1-read-2026-10-07.md`](absorption-stage1-read-2026-10-07.md). Gap 34.0 % (CI 30.3–39.0 %, inside §0's 20–45 % band). `LadderSpanLost` carries 49.9 % of the dropped flow, `TouchCrossed` 31.2 %, `BreakThrough` 3.0 % — so §5's F-4 is out. ⚠ §4.1's "directly comparable to the replay's 31 %" is not like-for-like (31 % is the counted share in rows; the gap is the missed share in USD, after `D-2`) — that read's §3. Stage 2 choice queued as `S1R-1` and the `TouchCrossed` row as `S1R-2` (ruling `Q-2`), both for the trader; no build before 2026-11-25.
+
 > ## ✅ STAGE 1 BUILT 2026-09-24 (UTC), with `D-2`, as S1 of [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md). ⛔ NOT DEPLOYED — it rides the single deploy after S2. Stage 2 is NOT built and stays gated on Stage 1's read.
 >
 > **Deviations from this spec, each recorded in [`absorption-d2-s1-spec-back.md`](absorption-d2-s1-spec-back.md):** fixture ids are `A88a`–`A88f` (the `A78` family was taken in the tree); the close-reason enum has a seventh member `TouchCrossed`, and `LadderSpanLost` / `ProximityShut` split on geometry, not on `lvl = 0` (§4.2's split does not match the code path); a Break-class print against the last level ends the shadow for that idle interval. The §7 D-table rows `D-6d.1` and `D-6d.3` are ruled; `D-6d.2` is subsumed; `D-6d.4` stands as written.

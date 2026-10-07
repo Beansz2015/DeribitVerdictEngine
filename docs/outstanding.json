@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T16:05Z",
-  "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
+  "updated_utc": "2026-10-07T19:30Z",
+  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — Stage 1 read done (S1R-1/S1R-2 queued); 10-07 fetch + sealed-study re-count done",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,13 +9,22 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 7 commits ahead of origin: the raw-book measure spec, the 2026-10-07 handover, pane updates (no engine code)",
+      "meaning": "Push master — 9 commits ahead of origin: the raw-book measure spec, the 2026-10-07 handover, the absorption Stage 1 read, pane updates (no engine code)",
       "since": "2026-10-07"
     },
     {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
+    },
+    {
+      "kind": "ruling",
+      "tick": true,
+      "id": "S1R-1, S1R-2",
+      "meaning": "Absorption Stage 1 read: pick the Stage 2 fix for the ladder-visibility close that drops half the lost flow (my read: a deeper ladder from the rebuilt raw book, probe arm first; rule it with RBM-1), and how to treat the touch-crossed close (my read: derivation first). Build after 2026-11-25",
+      "doc": "docs/absorption-stage1-read-2026-10-07.md",
+      "anchor": "§5 decisions",
+      "since": "2026-10-07"
     },
     {
       "kind": "ruling",
@@ -38,20 +47,6 @@
     }
   ],
   "dated": [
-    {
-      "date": "2026-10-08",
-      "approx": true,
-      "what": "Absorption Stage 1 read",
-      "doc": "docs/seat-handover-2026-10-01.md",
-      "anchor": "§0 FIRST ACTIONS item 6"
-    },
-    {
-      "date": "2026-10-08",
-      "approx": true,
-      "what": "Fetch with history comparison — also re-count the sealed liquidation × OFI study (tools/ops/a4_liq_ofi_counts.py)",
-      "doc": "docs/seat-handover-2026-10-01.md",
-      "anchor": "§0 FIRST ACTIONS item 5"
-    },
     {
       "date": "2026-10-09",
       "approx": true,

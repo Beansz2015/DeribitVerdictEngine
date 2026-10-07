@@ -340,6 +340,7 @@ A STOP is reported to the trader before any outcome is read. **A STOP is not an 
 > |---|---|---|---|---|---|---|
 > | 2026-10-02 (session 1) | 2026-10-01 | `20261002-121123` | 34 | 28 | 8 / 20 | NO |
 > | 2026-10-05 | 2026-10-04 | `20261005-112601` | 35 | 29 | 8 / 21 | NO |
+> | 2026-10-07 | 2026-10-06 | `20261007-180541` | 35 | 29 | 8 / 21 | NO (no new event; FLIP n = 100 projected 2028-11-19) |
 >
 > The 10-05 run used the new `--data-cut` argument (added 2026-10-05; default stays 2026-10-01, so a plain run reproduces the registered output).
 
