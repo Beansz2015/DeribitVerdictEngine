@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-06T20:45Z",
+  "updated_utc": "2026-10-07T16:00Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -100,6 +100,12 @@
       "doc": "docs/doc-state-register-proposal.md",
       "anchor": "§0 P1 sessions",
       "model": "Opus 5.5, medium (build) + seat, high (backfill judgment)"
+    },
+    {
+      "what": "After 2026-11-25: raw-book absorption measure — the 24 h two-clone CPU gate, then the build (after the trader rules its 12 decisions)",
+      "doc": "docs/raw-book-absorption-measure-spec.md",
+      "anchor": "§9 decision table and the pre-build gate",
+      "model": "Opus 5.5, high"
     }
   ]
 }
