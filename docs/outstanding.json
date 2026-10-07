@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 13 commits ahead of origin: the raw-book measure spec and its rulings, the 2026-10-07 handover, the absorption Stage 1 read and its rulings, pane updates (no engine code)",
+      "meaning": "Push master — 15 commits ahead of origin: the raw-book measure spec and its rulings, the 2026-10-07 handover, the absorption Stage 1 read and its rulings, pane updates (no engine code)",
       "since": "2026-10-07"
     },
     {
