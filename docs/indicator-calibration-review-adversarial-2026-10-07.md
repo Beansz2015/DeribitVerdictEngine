@@ -107,6 +107,8 @@ Run 2026-10-07 20:35 UTC on the eight rows at `26c6629`, after my labels were wr
 
 **Read: (a).** It is the only option where every level traces to something the trader stated, and where the code would say what is true: 1-minute levels are the trader's; 3-minute levels are derived to mean the same thing. (d) is cheaper and silently changes the meaning by resolution. Order: inside the ADX/RSI read (merged order step 8, this doc §4), after the forming-bar family, on closed bars only.
 
+**Harness 6** (2026-10-07 21:13 UTC, rev `eaf6f62`, my label `no_richer_option` written first): Jev `richer_option_wrong`, 5 of 5, mean top p 0.728. No economy flag. Files `docs/harness-runs/decision-bias-20261007T2113Z-icr6-*.json`.
+
 ⚠ **Not verified:** how far the 3-minute levels would move (not measured); whether the trader's chart RSI uses Wilder smoothing (code read only).
 
 ---

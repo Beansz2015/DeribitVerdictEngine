@@ -1,0 +1,43 @@
+{
+ "rev": "eaf6f62831e1ba5551b49258d14ccf35d43cd1f5",
+ "rev7": "eaf6f62",
+ "stamp_utc": "20261007T2113Z",
+ "builder": "seat 2026-10-07, ICR-6 RSI proposal",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-6-RSI@eaf6f62",
+   "question": "The engine's RSI(9) entry vote fires long above 60 and short below 40 (partial 55/45), on 1-minute bars in one session and 3-minute bars in two others. The trader's only stated RSI rule is 'momentum intact while RSI(9) is above 60, exit below 40' on a 1-minute chart. What should the vote's levels be anchored to?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "keep 60/40 and 55/45 on 1-minute bars as the trader's own rule; on 3-minute bars use the levels that mark the same market state, found by matching how often each is exceeded over the same minutes on closed bars; plus a parity test against the trader's chart; needs new per-resolution settings keys",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "re-anchor all levels to a chosen target firing share per session and resolution",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "fit the levels to maximise net expected value",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(d)",
+     "text": "keep 60/40 and 55/45 unchanged at every resolution",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Only (a) makes every level trace to something the trader stated, and the settings then say what is true at each resolution. (b) invents a target share, (c) overfits and duplicates a planned vote-value study, (d) is cheaper but silently gives the vote a different meaning on 3-minute bars.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "eaf6f62831e1ba5551b49258d14ccf35d43cd1f5",
+   "provenance": "live_recommendation"
+  }
+ ]
+}
