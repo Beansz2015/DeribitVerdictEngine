@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T21:20Z",
-  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — ICR-1..ICR-8 ruled except the ICR-6 RSI half (proposal awaiting confirmation); post-holiday order points at the adversarial review",
+  "updated_utc": "2026-10-07T22:05Z",
+  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — ICR-6 RSI half confirmed; RSI/volume rule study pre-registered",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,16 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 6 commits ahead of origin: the indicator-review rulings, the ICR-6 RSI proposal, RBM-7 confirmation, pane updates (no engine code)",
-      "since": "2026-10-07"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "ICR-6 (RSI half)",
-      "meaning": "Confirm the RSI entry design point: keep 60/40 on 1-minute bars as your momentum-intact rule, and derive the 3-minute levels that mark the same market state (time-matched, closed bars), plus a chart parity test. Scoring change after 2026-11-25",
-      "doc": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
-      "anchor": "§1b",
+      "meaning": "Push master — 7 commits ahead of origin: the indicator-review rulings, the ICR-6 RSI proposal and confirmation, the RSI/volume rule study pre-registration, RBM-7 confirmation, pane updates (no engine code)",
       "since": "2026-10-07"
     },
     {
@@ -67,6 +58,12 @@
     }
   ],
   "next_up": [
+    {
+      "what": "RSI/volume rule study, session 1: build closed bars from the history stores, port the indicators, parity check, frozen thresholds, outcome-blind counts and power (read-only; can run before or after the holiday)",
+      "doc": "docs/rsi-volume-rule-study-spec.md",
+      "anchor": "§1, §6, §7",
+      "model": "Opus 5.5, high"
+    },
     {
       "what": "After 2026-11-25: first fetch, closing history comparison, then the stage-4 pass rule (run dates, 14 days)",
       "doc": "docs/history-data-store-build-spec-back.md",
