@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T16:00Z",
+  "updated_utc": "2026-10-07T16:05Z",
   "updated_by": "seat 'Outstanding items visibility mod', Opus 5.5 — doc state register ruled (tick row removed, P1 build row added); other rows from the orchestrator seat",
   "away": {
     "from": "2026-10-14",
@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 4 commits ahead of origin: the raw-book measure spec and pane updates (no engine code)",
+      "meaning": "Push master — 7 commits ahead of origin: the raw-book measure spec, the 2026-10-07 handover, pane updates (no engine code)",
       "since": "2026-10-07"
     },
     {
