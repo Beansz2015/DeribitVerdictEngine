@@ -1,5 +1,13 @@
 # Raw-book absorption measure on the collector — spec (no build)
 
+> ✅ **RULED 2026-10-07 (UTC), trader, in their words:**
+> 1. *"Yes, amend RBM-1 with option (c) and the G1 arm"* → **`RBM-1` = (c)**: the whole tracker on the rebuilt book plus raw trades, handed a DEEPER ladder (depth rule in section 5.2a below), in this build. G1 carries a pre-registered probe arm D for it (section 5.2a). Fall back to (a) if arm D fails its rule. Follows the trader's `S1R-1` = (b) ruling in [`absorption-stage1-read-2026-10-07.md`](absorption-stage1-read-2026-10-07.md).
+> 2. *"For RBM-6, agreed with (a) but remind to adjust for the middle path once G2's memory read is done."* → **`RBM-6` = (a)**, with a dated reminder at G2 (section 5.3 below): size a higher cap from G2's memory reading.
+> 3. *"RBM-7 - (a) because (c) is additional work for the same result and no extra benefit (That I know of)."* → **`RBM-7` = (a)**, DPAPI file. Orchestrator note, not a reopening: under (a) the encrypted file and the profile's DPAPI master key travel in every AMI and snapshot of the box (the gate clones are built from one; `ami-0247c8b7275de49ac` is kept as a relaunch backup), so any retained image can recover the key; under (c) an image holds no secret. Not tested on a clone.
+> 4. *"Agreed with all of the other spec's reads."* → `RBM-2` (a) · `RBM-3` (a) · `RBM-4` (b) · `RBM-5` (a) · `RBM-8` (a) · `RBM-9` (a) · `RBM-10` (a) · `RBM-11` (a) · `RBM-12` as written.
+> - ⛔ **`RBM-9` (a) is an action for the trader:** update the read-only-key scope record (`HH-2`, [`history-host-and-raw-channel-read-2026-09-28.md`](history-host-and-raw-channel-read-2026-09-28.md) §4) to cover the collector and the gate clones BEFORE any key goes on them.
+> - Section 8's "No deeper ladder" line and section 2.1's "top 10" are superseded by `RBM-1` (c); both are marked in place.
+
 **Status:** SPEC ONLY, 2026-10-06 (UTC) (2026-10-07 GMT+8). Build after 2026-11-25 (trader away 2026-10-14 → 2026-11-25). Start commit `472fc68`; resumed at `d0ed69d` after a usage-limit stop (the two commits between touch only `docs/outstanding.json`).
 **Source ruling:** the RULED box at the top of [`raw-book-absorption-test-results-2026-10-06.md`](raw-book-absorption-test-results-2026-10-06.md) (do not reopen). Method: [`raw-book-absorption-test-spec.md`](raw-book-absorption-test-spec.md) and its probe `tools/RawBookProbe/`.
 **Class:** RESERVED as a whole — it moves a rendered value (the TAPE-strip `ABS` tag), changes the `analysis_log.csv` header, adds a `settings.json` key and puts a credential on the live collector. Every decision in this spec's decision table (section 9 below) goes to the trader.
@@ -13,7 +21,7 @@
 - **Why that tier.** The judgement is done here, and the fold is reused unchanged. Three parts are still hard: a second authenticated WebSocket beside the tape-capture connection on a 1 GB box; an order-book rebuild whose correctness must be CHECKED live (`change_id` agreement); and a header rotation with a shadow tracker, which touches the CSV, the riders ledger and the parity rule in one commit.
 - **Where it will slip.**
   1. **Touching the main feed.** The 100 ms book on the main connection feeds `MarketState.UpdateBook` → `GetBook` (run path `WsMarketDataSource.vb:73-74`, `ExitGuardEvaluator.vb:70`, `LiveMicrostructureEvaluator.vb:110`), `FoldOfiAverage`, and four staleness checks (`DeribitWsFeed.IsDegraded`, `UI/MainForm_ExitGuard.vb:144`, `UI/MainForm_LiveStrip.vb:192`, `WsMarketDataSource.vb:73`). **None of these moves.** Only the two absorption fold calls leave the main feed.
-  2. **Re-implementing the tracker.** `Core/LevelAbsorptionTracker.vb` is not edited. The new code hands it `OrderBookSnapshot` top-10 objects and trades, exactly as the probe's arm B did. A diff to that file is a stop sign.
+  2. **Re-implementing the tracker.** `Core/LevelAbsorptionTracker.vb` is not edited. The new code hands it `OrderBookSnapshot` objects and trades, as the probe's arm B did — **at the `RBM-1` (c) depth (section 5.2a), not the top 10.** No tracker edit is needed for depth: its visible span and band sums iterate whatever levels the snapshot carries (`AskSpan`/`BidSpan`/`SumAsks`/`SumBids`, read 2026-10-07). A diff to that file is a stop sign.
   3. **A fatal auth path.** The probe treats 3 auth failures as fatal and cancels the process (`RawBookProbeProgram.vb`, `HandleResponseAsync`). In the collector an auth failure must disable only the absorption connection. It must never touch the main feed or the process.
   4. **The two carried probe defects** (section 4.4 below): stale raw state across a reconnect, and counter-only mismatch logging.
   5. **The fixtures cannot catch a cross-connection ordering bug** (the implementer writes the fixtures). The G2 gate (section 5.3 below) is the only cover for it.
@@ -22,7 +30,8 @@
 
 | Session | Content | Model · effort |
 |---|---|---|
-| G1 (before any code) | Pre-build gate: twin-clone run with the existing probe (section 5.2 below) | Sonnet 5 · medium (recipe) |
+| G0 (before G1) | Add probe arm D to `tools/RawBookProbe` (section 5.2a below); tools only, no collector change | Opus 5.5 · medium |
+| G1 (before any code) | Pre-build gate: twin-clone run with the probe, arms A–D (section 5.2 below) | Sonnet 5 · medium (recipe) |
 | B1 | `Core/RawBookRebuilder.vb` (host-agnostic), `DeribitAbsorptionFeed.vb` (second connection), agreement check and mismatch records, credential loader, fixtures | Opus 5.5 · high |
 | B2 | Settings key and version bump, CSV rotation with the shadow 100 ms tracker, `absorption_episodes.log` v2 line, display-parity check, riders ledger | Opus 5.5 · high |
 | G2 + B3 | Post-build, pre-deploy gate on twin clones (section 5.3 below); read; deploy only on PASS and a trader go | Sonnet 5 · medium |
@@ -111,7 +120,7 @@ Main connection (DeribitWsFeed, public, UNCHANGED channels)
   trades.100ms ──────► AppendTrade / aggressor velocity / alerts / trade store (unchanged)
                      └► FoldAbsorptionTrade ON THE SHADOW TRACKER
 Absorption connection (NEW DeribitAbsorptionFeed, authenticated, read-only key)
-  book.BTC-PERPETUAL.raw ─► RawBookRebuilder ─► top 10 ─► FoldAbsorptionBook (PRIMARY tracker)
+  book.BTC-PERPETUAL.raw ─► RawBookRebuilder ─► depth D (RBM-1 (c); was top 10) ─► FoldAbsorptionBook (PRIMARY tracker)
   trades.BTC-PERPETUAL.raw ─────────────────────────────► FoldAbsorptionTrade (PRIMARY tracker)
   book.BTC-PERPETUAL.none.10.100ms ─► agreement check only (section 2.3)
 ```
@@ -271,6 +280,23 @@ Absorption connection (NEW DeribitAbsorptionFeed, authenticated, read-only key)
 | G1-S | Hard stop: T `Available MBytes` < 20 MB at any sample, or any process crash → FAIL |
 
 - **FAIL → STOP.** The build does not start. Report to the trader. This spec does not redesign the box (resize or the Linux port are the trader's call).
+
+### 5.2a G1 arm D — the deeper ladder (`RBM-1` (c), pre-registered 2026-10-07 before any arm-D data exists)
+
+- **Why:** the Stage 1 read ([`absorption-stage1-read-2026-10-07.md`](absorption-stage1-read-2026-10-07.md) §2) found `LadderSpanLost` — the old level within proximity of the touch but beyond the worst visible level — carries 49.9 % of the flow the tracker drops on the 100 ms top 10. Section 1.4 above measured it ×2.7 on a raw top 10.
+- **Arm D:** the rebuilt raw book plus raw trades (arm B's inputs), handed to a fourth tracker at depth **D = every rebuilt level within `(proximity_atr_frac + band_atr_frac) × ATR` of the touch on its side, and never fewer than 10 levels.** ATR and the two fractions are the ones the probe already carries to `SetLevels` each minute (0.30 and 0.10 at v69). Rationale: the tracker needs the level (within proximity) and its band (± band) inside the visible span; beyond that, depth changes nothing it reads.
+- **G0 build:** one more arm in `tools/RawBookProbe/RawBookProbeProgram.vb`, same fold order and stamps as arm B, its own episodes CSV and D-6d tallies. Selftest extended so a mutation that truncates arm D to 10 levels goes red.
+- **Read rule (pre-registered; read after G1, on the full 24 h, A–B pairing rules of `raw-book-absorption-test-spec.md` section 6 reused for B–D):**
+
+| ID | Rule | Outcome |
+|---|---|---|
+| G1-D1 | Arm D `LadderSpanLost` closes per day ≤ 10 % of arm B's | **PASS** → build `RBM-1` (c) |
+| G1-D2 | G1-C1 to G1-C4 still hold with arm D running (G1 stays an upper bound on CPU) | FAIL → STOP as G1 |
+| G1-D3 | Reported, no threshold: arm D vs arm B episodes per day, median life, `ABSORB` tag per day, counting gap, `pullFrac` p50/p90, the share at > 0.75 | Shown to the trader with the outcome |
+| — | G1-D1 fails | Fall back to `RBM-1` (a) and report; the deeper ladder returns as its own proposal |
+
+- ⚠ **Not verified:** whether 0.40 × ATR of depth fits inside the raw book's typical populated levels on a thin ASIA book, and the CPU cost of summing over more levels per fold. G1-D2 measures the second.
+- **One-line auto-proceed log:** the depth rule (proximity + band, floor 10) and the 10 % threshold in G1-D1 were set by the orchestrator seat 2026-10-07, before any arm-D data; both are doc-only and reversible; the trader may change them before G0.
 - K's counter log is also the first observer-free headroom reading of the box since August. Record it whatever the outcome.
 
 ### 5.3 G2 — post-build, pre-deploy gate
@@ -284,6 +310,8 @@ Absorption connection (NEW DeribitAbsorptionFeed, authenticated, read-only key)
 | G2-M2 | T `Available MBytes` 1-minute minimum ≥ 50 MB |
 | G2-M3 | T share of 15 s samples with `Pages Output/sec` > 0 ≤ K's share + 5 percentage points |
 | G2-A1 | Agreement: exact mismatches = 0; every prior mismatch has a complete record (all fields in section 2.3 above) |
+
+⏰ **REMINDER after G2 (trader ruling 2026-10-07, `RBM-6`):** once G2's memory reading is in, size the mismatch-record cap for the middle path (a higher cap than 200 records/day, for example 1,000 records/day or 32 MB) and bring it to the trader before deploy.
 | G2-A2 | `AbsorptionBookFeed` = `RAW` on ≥ 99 % of T's rows; every other row names its cause |
 | G2-R | Rollback rehearsal on T at the end: set `"100ms"`, restart; the next row reads `100MS` and no rotation happens |
 
@@ -324,7 +352,7 @@ Absorption connection (NEW DeribitAbsorptionFeed, authenticated, read-only key)
 ## 8. What is NOT in this build
 
 - **No `max_pull_frac` change** (ruled). Re-derived at absorption activation on raw-measured rows against outcomes.
-- **No deeper ladder.** The rebuilt book has the full depth; the tracker still gets the top 10, as measured. Handing it more depth would change `LadderSpanLost` (the D-6d suspect close) and is a separate, unmeasured proposal — an option for the gated mechanism-revision build.
+- ~~**No deeper ladder.**~~ ⛔ **SUPERSEDED 2026-10-07 by `RBM-1` (c): the tracker gets depth D (section 5.2a).** Original text: The rebuilt book has the full depth; the tracker still gets the top 10, as measured. Handing it more depth would change `LadderSpanLost` (the D-6d suspect close) and is a separate, unmeasured proposal — an option for the gated mechanism-revision build.
 - **No change to the main feed's channels**, to OFI, to the trade store, or to scoring.
 
 ---
@@ -335,7 +363,7 @@ ID prefix `RBM` (raw-book measure), checked free with `git grep -E "\bRBM-"` (0 
 
 | ID | Question | Options | Read | Three-step test · label |
 |---|---|---|---|---|
-| `RBM-1` | Scope of the switch | (a) the whole tracker fed from the rebuilt top 10 + raw trades (probe arm B, measured): every `Absorption*` column moves; `ABS` tag ~162 → ~71 per day · (b) only the D8 accumulators from the raw stream; episode lifecycle and band trajectory stay on 100 ms (closest to the ruling's literal words; needs a tracker change; never measured) | **(a).** It is the configuration the read measured, and it changes the feed, not the tracker. ⚠ The tag-rate drop is material; the trader should see it before ruling | Step 1: (b) does not record or guarantee more; it is unmeasured · `no_richer_option` |
+| `RBM-1` ✅ **(c) RULED 2026-10-07** | Scope of the switch | **(c) added 2026-10-07:** (a), but the tracker gets depth D from the rebuilt book (section 5.2a), measured first by G1 arm D; fall back to (a) if G1-D1 fails · (a) the whole tracker fed from the rebuilt top 10 + raw trades (probe arm B, measured): every `Absorption*` column moves; `ABS` tag ~162 → ~71 per day · (b) only the D8 accumulators from the raw stream; episode lifecycle and band trajectory stay on 100 ms (closest to the ruling's literal words; needs a tracker change; never measured) | **(a).** It is the configuration the read measured, and it changes the feed, not the tracker. ⚠ The tag-rate drop is material; the trader should see it before ruling | Step 1: (b) does not record or guarantee more; it is unmeasured · `no_richer_option` |
 | `RBM-2` | Connection topology | (a) a second authenticated connection for absorption only (raw book, raw trades, 100 ms book for the check) · (b) authenticate the existing public connection and add the channels to it | **(a).** It isolates the tape-capture connection from auth and raw-channel faults, and keeps arm B's same-socket order for the tracker | Step 1: (a) guarantees more (isolation) and keeps measured order · `no_richer_option` |
 | `RBM-3` | Raw book unavailable | (a) primary tracker IDLE, no tag, feed column names the cause · (b) silent fall back to the 100 ms fold · (c) fall back to the 100 ms fold, tagged by the feed column | **(a).** The shadow columns already record the 100 ms values, so (c) adds no data; it would make the strip tag mean two different measures with no visible mark | Step 3: the richer-looking (c) is mechanically wrong on the strip (one tag, two measures, no marker) and duplicates the shadow columns · `richer_option_wrong` |
 | `RBM-4` | CSV and dataset boundary | (a) in-place meaning change, no header change, split on `SettingsVersion` only (the v61 precedent) · (b) header rotation: `Absorption*` become raw; append `AbsorptionBookFeed` and five `Absorption100*` shadow columns · (c) rotation with `AbsorptionBookFeed` only | **(b).** Each row says which measure it holds, and the paired series covers more than one day for the `max_pull_frac` re-derivation | Step 1: (b) records the most · `no_richer_option` |
