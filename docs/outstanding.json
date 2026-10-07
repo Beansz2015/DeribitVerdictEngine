@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 4 commits ahead of origin: the indicator-review rulings, the ICR-6 RSI proposal, RBM-7 confirmation, pane updates (no engine code)",
+      "meaning": "Push master — 6 commits ahead of origin: the indicator-review rulings, the ICR-6 RSI proposal, RBM-7 confirmation, pane updates (no engine code)",
       "since": "2026-10-07"
     },
     {

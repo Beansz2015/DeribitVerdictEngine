@@ -1,0 +1,38 @@
+{
+ "rev": "15b94398a93024d2012a08305d801a3459d4dadb",
+ "rev7": "15b9439",
+ "stamp_utc": "20261007T2132Z",
+ "builder": "seat 2026-10-07, RSI/volume rules answer",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|RSI-VOL-RULES@15b9439",
+   "question": "The trader says two rules of thumb, RSI(9) 60/40 and volume above 3x SMA(9), may be changed if that makes the analysis more accurate. On current data neither has outcome evidence: the volume vote has never fired live because it reads the in-progress bar, and the RSI vote was never read alone; momentum votes lean negative in one session but did not replicate. What should be done now?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "make only the mechanism fixes that need no outcome data (closed-bar volume on the engine's dynamic threshold; RSI levels on 3-minute bars mapped to the same market state), and run a pre-registered, split-half outcome study on 21 months of closed bars from the history store before choosing any new level or replacement measure",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "pick new levels now from the existing live book by searching for the best-performing values",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "keep both rules exactly as they are",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(b) fits levels on a small book where the volume vote never fired and the RSI vote was never isolated, which is overfitting. (c) keeps a dead volume vote and a resolution mismatch. (a) fixes what is provably wrong and lets the data choose the rest with a holdout.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "15b94398a93024d2012a08305d801a3459d4dadb",
+   "provenance": "live_recommendation"
+  }
+ ]
+}
