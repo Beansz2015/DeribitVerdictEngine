@@ -1,17 +1,12 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T21:00Z",
-  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — RBM-1..RBM-12 ruled (tick row removed); HH-2 scope update queued; post-holiday raw-book row amended",
+  "updated_utc": "2026-10-07T21:10Z",
+  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — push row removed (trader pushed); RBM-7 (a) confirmed",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
-    {
-      "kind": "push",
-      "meaning": "Push master — 15 commits ahead of origin: the raw-book measure spec and its rulings, the 2026-10-07 handover, the absorption Stage 1 read and its rulings, pane updates (no engine code)",
-      "since": "2026-10-07"
-    },
     {
       "kind": "ruling",
       "tick": true,
