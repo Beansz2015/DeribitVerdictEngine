@@ -296,6 +296,7 @@ Absorption connection (NEW DeribitAbsorptionFeed, authenticated, read-only key)
 | — | G1-D1 fails | Fall back to `RBM-1` (a) and report; the deeper ladder returns as its own proposal |
 
 - ⚠ **Not verified:** whether 0.40 × ATR of depth fits inside the raw book's typical populated levels on a thin ASIA book, and the CPU cost of summing over more levels per fold. G1-D2 measures the second.
+- **Harness 6 on the amended row** (2026-10-07 20:55 UTC, rev `0ae517a`, label written first: `no_richer_option`): Jev `no_richer_option`, 5 of 5, mean top p 0.476. No flag. Files `docs/harness-runs/decision-bias-20261007T2055Z-rbm1c-*.json`.
 - **One-line auto-proceed log:** the depth rule (proximity + band, floor 10) and the 10 % threshold in G1-D1 were set by the orchestrator seat 2026-10-07, before any arm-D data; both are doc-only and reversible; the trader may change them before G0.
 - K's counter log is also the first observer-free headroom reading of the box since August. Record it whatever the outcome.
 

@@ -1,0 +1,38 @@
+{
+ "rev": "0ae517aa850d68ce59482da3bc11be864a5e8e62",
+ "rev7": "0ae517a",
+ "stamp_utc": "20261007T2055Z",
+ "builder": "seat 2026-10-07, RBM-1 amendment",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/raw-book-absorption-measure-spec.md|RBM-1c@0ae517a",
+   "question": "The absorption tracker will move to an order book rebuilt from a raw feed. A live instrument found half the flow the tracker drops is lost when a watched level falls outside the 10 levels it sees, and a probe measured that a raw top 10 makes that close 2.7 times more frequent. What scope should the switch have?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "feed the whole tracker the rebuilt top 10 plus raw trades, exactly as a 24 h probe measured; the deeper ladder becomes a separate later proposal",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(b)",
+     "text": "only the pull/post accumulators come from the raw stream; episodes stay on the 100 ms book; never measured and needs a tracker change",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    },
+    {
+     "label": "(c)",
+     "text": "as (a), but hand the tracker every rebuilt level within the proximity plus band distance of the touch (at least 10), measured first by an extra pre-registered arm on the existing 24 h pre-build probe run; fall back to (a) if that arm does not cut the out-of-view closes to 10 % or less",
+     "src": "docs/raw-book-absorption-measure-spec.md"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "(c) removes the cause in the same build, so the dataset boundary is paid once, and the extra probe arm measures it before any code at almost no cost. (a) ships a known worse defect and pays a second boundary later. (b) is unmeasured.",
+   "question_src": "docs/raw-book-absorption-measure-spec.md",
+   "rationale_src": [
+    "docs/raw-book-absorption-measure-spec.md"
+   ],
+   "state_rev": "0ae517aa850d68ce59482da3bc11be864a5e8e62",
+   "provenance": "live_recommendation"
+  }
+ ]
+}
