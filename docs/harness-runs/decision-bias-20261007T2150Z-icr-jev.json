@@ -1,0 +1,208 @@
+{
+    "rev":  "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+    "population":  "docs/harness-runs/decision-bias-20261007T2150Z-icr-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20261007T2150Z-icr-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "jev_model":  "requested=[jev-latest x40] resolved=[jev-1.13.0 x40] run_utc=2026-10-07T20:35:17Z",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  40,
+    "usage_input_tokens":  32148,
+    "wall_time_sec":  32.38,
+    "items":  [
+                  {
+                      "id":  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-1@26c6629",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.856,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.85,
+                                                       0.87,
+                                                       0.83,
+                                                       0.88,
+                                                       0.85
+                                                   ],
+                      "usage_input_tokens":  4487,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-2@26c6629",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.544,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.51,
+                                                       0.53,
+                                                       0.62,
+                                                       0.55,
+                                                       0.51
+                                                   ],
+                      "usage_input_tokens":  3996,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-3@26c6629",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.852,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.86,
+                                                       0.86,
+                                                       0.82,
+                                                       0.85,
+                                                       0.87
+                                                   ],
+                      "usage_input_tokens":  3909,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-4@26c6629",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.852,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.88,
+                                                       0.84,
+                                                       0.84,
+                                                       0.84,
+                                                       0.86
+                                                   ],
+                      "usage_input_tokens":  3995,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-5@26c6629",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.748,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.75,
+                                                       0.76,
+                                                       0.74,
+                                                       0.73,
+                                                       0.76
+                                                   ],
+                      "usage_input_tokens":  3826,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-6@26c6629",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.562,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.53,
+                                                       0.59,
+                                                       0.55,
+                                                       0.58,
+                                                       0.56
+                                                   ],
+                      "usage_input_tokens":  4202,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-7@26c6629",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.77,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.7,
+                                                       0.76,
+                                                       0.81,
+                                                       0.81,
+                                                       0.77
+                                                   ],
+                      "usage_input_tokens":  3992,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-8@26c6629",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.708,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.73,
+                                                       0.7,
+                                                       0.71,
+                                                       0.7,
+                                                       0.7
+                                                   ],
+                      "usage_input_tokens":  3741,
+                      "seat_label":  "no_richer_option"
+                  }
+              ]
+}

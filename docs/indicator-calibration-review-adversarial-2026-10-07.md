@@ -66,7 +66,22 @@ Each is a sequencing or scoping ruling on reserved work (scoring or a dataset bo
 
 ### 1a. Harness 6 result
 
-*Filled after the run; see the commit that follows this one.*
+Run 2026-10-07 20:35 UTC on the eight rows at `26c6629`, after my labels were written and committed to the baseline file. Files: `docs/harness-runs/decision-bias-20261007T2150Z-icr-{population,baseline,jev}.json`. 40 Jev calls, 32,148 input tokens.
+
+| ID | My label (written first) | Jev (5 of 5 samples each) | Mean top p |
+|---|---|---|---:|
+| `ICR-1` | no_richer_option | richer_option_wrong | 0.856 |
+| `ICR-2` | no_richer_option | richer_option_wrong | 0.544 |
+| `ICR-3` | richer_option_wrong | richer_option_wrong | 0.852 |
+| `ICR-4` | **gives_up_for_economy** | richer_option_wrong | 0.852 |
+| `ICR-5` | no_richer_option | richer_option_wrong | 0.748 |
+| `ICR-6` | richer_option_wrong | richer_option_wrong | 0.562 |
+| `ICR-7` | no_richer_option | richer_option_wrong | 0.770 |
+| `ICR-8` | no_richer_option | richer_option_wrong | 0.708 |
+
+- **Jev raised no economy flag.** The no_richer_option / richer_option_wrong disagreements both mean "no trade of information for work", so they do not change any read.
+- ⚠ **My own label flags `ICR-4`.** Option (b), its own boundary, leaves a self-describing edge in the live data that isolates the decay fix. My pick gives that up for one burst-path boundary instead of two, and leans on an offline replay for the attribution. **That is the economy class by `CLAUDE.md`'s three-step test. Treat (b) as the more truthful option**; I still read (a), but the call is yours with that trade stated.
+- **Harness 4 (doc scanner) on this doc**, key-less pass at `26c6629`: 0 version, value and pointer candidates; 0 missing-member and 0 line-past-end flags. All four Jev arms had 0 items, so the scanner exits `ENUMERATOR_SUSPECT` — by design a zero is a tripwire, not a clean bill.
 
 ---
 

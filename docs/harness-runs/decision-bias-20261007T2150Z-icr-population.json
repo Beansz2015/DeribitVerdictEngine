@@ -1,0 +1,226 @@
+{
+ "rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+ "rev7": "26c6629",
+ "stamp_utc": "20261007T2150Z",
+ "builder": "review seat 2026-10-07 (indicator review pack)",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-1@26c6629",
+   "question": "A trading engine reads the in-progress (forming) last candle at each run. That one cause silences a volume-spike vote, silences a CVD divergence gate, lets 5-minute swing pivots repaint inside a bar, and skews OBV, the volume profile and the last ATR step. An earlier plan split these across three fix classes. How should the fixes be scoped?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "one spec for the whole family; each indicator gets its own choice (read only closed bars, a forming-bar-aware variant, or no change) and its own decision row; the measurement-cache half stays with the measurement fixes already ordered first",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "the earlier split: the volume vote as a mechanism fix, the pivots under an exit-tools decision, the CVD divergence gate as a unit fix",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "fix the volume vote only now, the rest later",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a): one root, one spec, one explicit choice per indicator. (b) misdiagnoses the CVD gate and files the pivot under an exit-tool decision that waits on an unrelated measurement. (c) leaves CVD divergence silent for the same reason the volume vote is silent. The spec must also rule the volume threshold design point, which on closed bars sits near 4.5x in the main session, not the 3x the trading style names.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-2@26c6629",
+   "question": "The forming-bar fix would make a volume vote fire on about 8-10 % of rows instead of about 0.2 %. Nobody has measured whether that vote predicts outcomes, because it has never fired. Should anything be measured before the fix takes a slot as a live scoring change?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "offline reads first: per indicator, the closed-bar fire rate and the share of rows that change; and the closed-bar volume and CVD divergence votes' net EV when they agree or oppose the trade, on existing logged rows",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "ship on mechanism grounds with no outcome read",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "leave the value question to the later vote-value study",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a): the earlier plan calls the volume fix the single most valuable with no outcome evidence. Candle history and the existing outcome walk can produce one with no scoring change. (b) spends a scoring boundary blind.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-3@26c6629",
+   "question": "Two latent fixes (a 15-minute gate that fails open on missing data, and a VWAP session fallback that defeats its warmup guard) changed no logged row in five weeks of live data: 0 of 22,710 rows and 0 of 143 rows respectively. Project rules allow one scoring change per dataset boundary, or a bundle with sign-off. How should they ship?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "bundle both into the first audit scoring boundary, with sign-off",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "one dataset boundary each",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "leave them unfixed",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a): a separate boundary for a fix that changed no logged row in five weeks buys an attribution read with nothing to attribute; the richer option measures nothing. Both stay scoring changes, so both still need sign-off.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-4@26c6629",
+   "question": "A burst detector reads its sums as of the last trade, not as of now, so a burst that ended can stay at full strength through a short silence. The detector is under a pre-registered outcome test, and an earlier decision holds every change to it until that test is read; after the test, a separate threshold change to the same detector may ship. When should the decay fix ship?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "with the threshold change after the test, with an offline replay of the decay on the trade tape in that change's spec",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "as its own dataset boundary after the test",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "leave it (rated an edge case)",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a): the earlier decision holds both until the test is read. One change to the burst instrument, with the decay's own effect measured offline first, gives the attribution (b) would give at one boundary instead of two.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-5@26c6629",
+   "question": "A time-averaged order-flow imbalance gives each book update the weight of the gap before it, so a transient after a lull can dominate for seconds. Its reach on live data is not measured. The indicator carries the only order-flow vote with a confirmed outcome effect, and its thresholds were fitted on the current averaging. What next?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "measure first: replay the 100 ms book through both averaging rules and count signal flips at run instants",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "queue the fix now",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(c)",
+     "text": "leave it (rated an edge case)",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a): the indicator carries the only confirmed order-flow vote, and its thresholds were fitted on the shipped averaging. A blind fix moves both.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-6@26c6629",
+   "question": "A queued read will re-anchor four indicator trigger levels (ADX 25 trend / 20 range, RSI 60 / 40). The precedent re-anchored an engine-internal level to a documented share of bars. The style profile states ADX below 20 is range and above 25 is trend, as read on the user's own chart; it uses RSI 60/40 in trade management, not at entry, while the engine uses RSI at entry. How should the read be framed?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "ADX: test that the engine's ADX matches the user's chart first and re-anchor only on a mismatch; RSI: the user states the entry-vote design point",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "re-anchor all four levels to a stated share of bars per session and resolution",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a): the precedent re-anchored an engine-internal level with a documented design rate. ADX 25/20 has a documented design point too, and it is the user's chart. The engine's ADX code is standard Wilder smoothing, so a match is likely; not tested against chart values.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-7@26c6629",
+   "question": "A metric, net EV per session-day, counts trades as episodes: take the first directional row, skip later rows until that trade resolves (target, stop or the evaluation window end) plus a cooloff, and its definition says this is how the automated order bridge trades. The bridge enters only on the two higher confidence tiers, has no evaluation window, and has known defects that change entries and re-entries. What should the definition say?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "restate it as an engine-side signal-episode model; add the bridge filters it omits (confidence tiers, flat-only, exits by placed levels with no window end, the named cooloff value); drop the claim that it mirrors the bridge until the bridge defects are fixed and real fills exist",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "keep the wording",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a): as worded, the rule counts low-confidence rows the bridge refuses and ends trades at a window the bridge does not have.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-8@26c6629",
+   "question": "Two groups of live scoring fixes wait, each a dataset boundary: stop-geometry fixes from an audit (one sits on a path that can send a stop on the wrong side of the fill) and the forming-bar indicator fixes. Every outcome read, including the vote-value study, is computed at the placed stop and target levels. Which goes first?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "the audit stop-geometry fixes first, then the forming-bar family",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    },
+    {
+     "label": "(b)",
+     "text": "the forming-bar family first, straight after the daylight-saving change",
+     "src": "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "(a): one geometry defect sits on a wrong-side-stop path, and every outcome read is computed at placed geometry. Settle the geometry, then measure and fix the votes.",
+   "question_src": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+   "rationale_src": [
+    "docs/indicator-calibration-review-adversarial-2026-10-07.md"
+   ],
+   "state_rev": "26c662984618509e5dbf6c4ac542469f0ae4b6d8",
+   "provenance": "live_recommendation"
+  }
+ ]
+}

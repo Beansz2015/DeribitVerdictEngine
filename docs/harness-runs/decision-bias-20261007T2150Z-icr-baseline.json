@@ -1,0 +1,14 @@
+{
+ "rev": "26c6629",
+ "written_by": "review seat 2026-10-07 (indicator review pack), BEFORE the Jev run",
+ "labels": {
+  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-1@26c6629": "no_richer_option",
+  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-2@26c6629": "no_richer_option",
+  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-3@26c6629": "richer_option_wrong",
+  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-4@26c6629": "gives_up_for_economy",
+  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-5@26c6629": "no_richer_option",
+  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-6@26c6629": "richer_option_wrong",
+  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-7@26c6629": "no_richer_option",
+  "docs/indicator-calibration-review-adversarial-2026-10-07.md|ICR-8@26c6629": "no_richer_option"
+ }
+}

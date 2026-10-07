@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T20:25Z",
-  "updated_by": "review seat 2026-10-07/08, Opus 5.5 - adversarial review of the indicator review pack started",
+  "updated_utc": "2026-10-07T20:45Z",
+  "updated_by": "review seat 2026-10-07/08, Opus 5.5 - adversarial review done; ICR-1..ICR-8 queued; push count",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 10 commits ahead of origin: the raw-book measure spec, the 2026-10-07 handover, the absorption Stage 1 read, pane updates (no engine code)",
+      "meaning": "Push master — 12 commits ahead of origin: the raw-book measure spec, the 2026-10-07 handover, the absorption Stage 1 read, the indicator review-pack adversarial review and its read-only tool, pane updates (no engine code)",
       "since": "2026-10-07"
     },
     {
@@ -20,15 +20,18 @@
       "doc": "docs/raw-book-absorption-measure-spec.md",
       "anchor": "§9 decision table",
       "since": "2026-10-07"
+    },
+    {
+      "kind": "ruling",
+      "tick": true,
+      "id": "ICR-1..ICR-8",
+      "meaning": "Indicator review pack, adversarial review: 8 sequencing and scoping decisions (forming-bar family as one spec, offline reads before its scoring slot, bundle the zero-reach latent fixes, burst decay with the threshold change, measure the order-flow averaging first, ADX chart-parity framing, session-day metric wording, stop geometry before the forming-bar fixes). All after 2026-11-25",
+      "doc": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+      "anchor": "§1 decision table",
+      "since": "2026-10-08"
     }
   ],
   "in_progress": [
-    {
-      "what": "Adversarial review of the indicator review pack (fresh seat): attack its order and classes, answer its questions, check its carried claims",
-      "where": "local seat",
-      "started_utc": "2026-10-07T20:10Z",
-      "doc": "docs/indicator-calibration-review-2026-10-02.md"
-    },
     {
       "what": "Collector on AWS, instance 41a3e894 (watchdog restart during a venue halt); read-backs until 2026-10-13",
       "where": "AWS box i-0d6c133058876273e",
