@@ -1,5 +1,10 @@
 # Absorption `D-6d` Stage 1 read — 2026-10-07 (UTC)
 
+> ✅ **RULED 2026-10-07 (UTC), trader, in their words: "Agreed with both reads."**
+> - **`S1R-1` = (b):** a deeper ladder from the rebuilt raw book, with a pre-registered probe arm before any build. To be specced with the raw-book measure build (`RBM-1` itself is still open).
+> - **`S1R-2` = (a):** a derivation of the band trajectory across a crossed touch first, then a decision. After `S1R-1`.
+> - Both after 2026-11-25 (holiday freeze).
+
 **Spec:** [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4 (the instrument), §5 (Stage 2 options), §0 (escalation triggers). Deploy and watch: [`absorption-d2-s2-batch-summary.md`](absorption-d2-s2-batch-summary.md) §5 step 6. Seat: Opus 5.5, high.
 
 **Data:** fetch `aws_fetch/20261007-180541` (gitignored). `absorption_episodes.log`: 11,874 lines, 0 malformed, 2026-09-24 18:46 → 2026-10-07 18:05 UTC, 11 instance ids, all after the 2026-09-24 deploy (`25951567…`). Weekday-scoped (the weekday-scope ruling): 3,678 weekend lines excluded, **10 weekday dates** (09-24 and 10-07 partial). Ruled read length: ~2 weekday-weeks. Met.
@@ -17,7 +22,7 @@
 | Which close path drops the flow | ⭐ **`LadderSpanLost`: 46.5 % of closes, 49.9 % of the dropped (shadow) USD.** Then `TouchCrossed`: 26.7 % of closes, 31.2 % of shadow |
 | `d6d-episode-continuity-spec.md` §5 selection | `LadderSpanLost` dominates ⇒ **F-1 (ladder hysteresis) or F-3 (deeper book)**. **F-4 (nothing) is ruled out:** `BreakThrough` carries 13.1 % of closes and 3.0 % of shadow |
 | `D-2` STOP watch: flagged rate up **and** ratio distribution shifted left | **Not met.** Flagged share of active reads 0.70 % → 1.35 %, but the ratio moved **right** (p90 0.080 → 0.390), as `D-2` predicts |
-| Stage 2 build | **None now.** Holiday freeze, and the choice is reserved (decisions `S1R-1`, `S1R-2` in §5) |
+| Stage 2 build | **None now.** Holiday freeze. Decisions `S1R-1` = (b) and `S1R-2` = (a), RULED 2026-10-07 (§5, top box) |
 
 ---
 

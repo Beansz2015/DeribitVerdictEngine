@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T19:30Z",
-  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — Stage 1 read done (S1R-1/S1R-2 queued); 10-07 fetch + sealed-study re-count done",
+  "updated_utc": "2026-10-07T20:10Z",
+  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — S1R-1/S1R-2 ruled (tick row removed, post-holiday rows added)",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,22 +9,13 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 9 commits ahead of origin: the raw-book measure spec, the 2026-10-07 handover, the absorption Stage 1 read, pane updates (no engine code)",
+      "meaning": "Push master — 10 commits ahead of origin: the raw-book measure spec, the 2026-10-07 handover, the absorption Stage 1 read, pane updates (no engine code)",
       "since": "2026-10-07"
     },
     {
       "kind": "go",
       "meaning": "Open a fresh seat for the adversarial review of the indicator review pack (ruled: fresh seat)",
       "since": "2026-10-02"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "S1R-1, S1R-2",
-      "meaning": "Absorption Stage 1 read: pick the Stage 2 fix for the ladder-visibility close that drops half the lost flow (my read: a deeper ladder from the rebuilt raw book, probe arm first; rule it with RBM-1), and how to treat the touch-crossed close (my read: derivation first). Build after 2026-11-25",
-      "doc": "docs/absorption-stage1-read-2026-10-07.md",
-      "anchor": "§5 decisions",
-      "since": "2026-10-07"
     },
     {
       "kind": "ruling",
@@ -100,6 +91,12 @@
       "what": "After 2026-11-25: raw-book absorption measure — the 24 h two-clone CPU gate, then the build (after the trader rules its 12 decisions)",
       "doc": "docs/raw-book-absorption-measure-spec.md",
       "anchor": "§9 decision table and the pre-build gate",
+      "model": "Opus 5.5, high"
+    },
+    {
+      "what": "After 2026-11-25: absorption Stage 2 — spec a deeper ladder for the tracker from the rebuilt raw book, with a pre-registered probe arm before any build (with the raw-book measure build); then the touch-crossed close derivation",
+      "doc": "docs/absorption-stage1-read-2026-10-07.md",
+      "anchor": "§5, ruling box at the top",
       "model": "Opus 5.5, high"
     }
   ]
