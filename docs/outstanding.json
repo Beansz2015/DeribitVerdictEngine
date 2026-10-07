@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T21:10Z",
-  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — push row removed (trader pushed); RBM-7 (a) confirmed",
+  "updated_utc": "2026-10-07T21:30Z",
+  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — ICR-1..ICR-8 ruled except the ICR-6 RSI half (proposal awaiting confirmation); post-holiday order points at the adversarial review",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -10,11 +10,11 @@
     {
       "kind": "ruling",
       "tick": true,
-      "id": "ICR-1..ICR-8",
-      "meaning": "Indicator review pack, adversarial review: 8 sequencing and scoping decisions (forming-bar family as one spec, offline reads before its scoring slot, bundle the zero-reach latent fixes, burst decay with the threshold change, measure the order-flow averaging first, ADX chart-parity framing, session-day metric wording, stop geometry before the forming-bar fixes). All after 2026-11-25",
+      "id": "ICR-6 (RSI half)",
+      "meaning": "Confirm the RSI entry design point: keep 60/40 on 1-minute bars as your momentum-intact rule, and derive the 3-minute levels that mark the same market state (time-matched, closed bars), plus a chart parity test. Scoring change after 2026-11-25",
       "doc": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
-      "anchor": "§1 decision table",
-      "since": "2026-10-08"
+      "anchor": "§1b",
+      "since": "2026-10-07"
     },
     {
       "kind": "go",
@@ -68,9 +68,9 @@
       "anchor": "decision table, row D-6"
     },
     {
-      "what": "After 2026-11-25: the rest of the post-holiday order (measurement fixes, daylight-saving session hours, liquidation park build with the per-session liquidation-size rider, ADX/RSI re-anchor)",
-      "doc": "docs/seat-handover-2026-10-01.md",
-      "anchor": "§3"
+      "what": "After 2026-11-25: the merged post-holiday order (ruled 2026-10-07): measurement fixes, daylight-saving session hours, offline closed-bar reads, audit stop geometry with the two zero-reach fixes bundled, ONE forming-bar spec (volume on the engine's dynamic threshold), liquidation park build with the per-session liquidation-size rider, ADX parity and RSI design point, vote-value study; burst decay on its own boundary after burst run 2",
+      "doc": "docs/indicator-calibration-review-adversarial-2026-10-07.md",
+      "anchor": "§4 merged order and the ruling box"
     },
     {
       "what": "After 2026-11-25: doc state register P1 — build the register and its gate checks, then the full decision backfill (768 rows, living docs first) in the same build",
@@ -83,6 +83,11 @@
       "doc": "docs/raw-book-absorption-measure-spec.md",
       "anchor": "ruling box at the top, §5.2a and §5.3",
       "model": "Opus 5.5, high"
+    },
+    {
+      "what": "Revisit the net EV per session-day rule once the order app fixes its stand-down and cooloff defects and realised fills exist (trader-directed 2026-10-07)",
+      "doc": "docs/DeribitIndicatorProject.md",
+      "anchor": "§5a, net EV per session-day row"
     }
   ]
 }

@@ -1,5 +1,11 @@
 # Adversarial review of `indicator-calibration-review-2026-10-02.md`
 
+> ✅ **RULED 2026-10-07 (UTC), trader, in their words** (after the orchestrator's read of this doc):
+> 1. *"Agreed with your reads; ICR-4 (b)"* → **`ICR-1` (a) · `ICR-2` (a) · `ICR-3` (a) · `ICR-4` = (b)**, AUD-19 ships on its own burst-path boundary after burst run 2 (the self-describing option; ⚠ the `AVR-2` (c) threshold must then be validated on the decayed instrument) **· `ICR-5` (a) · `ICR-7` (a) · `ICR-8` (a).** `ICR-6` see item 3.
+> 2. *"Volume design point = Follow the engine's dynamic high threshold."* → the forming-bar spec (`ICR-1`) keeps the `DynamicNorms` high threshold (about 3.4–3.9× raw on closed bars, about 4.5× in NY), NOT `trader-profile.md` §3's 3× SMA(9). ⚠ `trader-profile.md` §3 (Volume SMA row) now disagrees with the engine by ruling; the profile row is annotated, not rewritten.
+> 3. *"ICR-6 = Please propose the most accurate/truthful option."* → **ADX half: (a), chart parity first.** **RSI half: the orchestrator's proposal is §1b below, awaiting the trader's confirmation** (a scoring design point, reserved).
+> 4. *"ICR-7 = Yes, but this must be revisited once the order app's fixes this."* → **`ICR-7` (a)** applied to `DeribitIndicatorProject.md` §5a the same day; ⏰ **revisit when the order app fixes audit rows A8 and A17** (`adversarial-audit-2026-09-24.md` §B) and realised fills exist (`W6-6`).
+
 **Written:** 2026-10-07 (UTC; `date -u` read 20:09 at seat start) by a fresh seat, as the trader ruled ([`seat-handover-2026-10-07.md`](seat-handover-2026-10-07.md) §0 row 6).
 **Reviews:** [`indicator-calibration-review-2026-10-02.md`](indicator-calibration-review-2026-10-02.md) (the "review pack" below). Brief: attack the order in `indicator-calibration-review-2026-10-02.md` §7 and the classes in `indicator-calibration-review-2026-10-02.md` §6, answer the questions in `indicator-calibration-review-2026-10-02.md` §8, and check the carried claims in `indicator-calibration-review-2026-10-02.md` §9.
 **Class:** analysis only. No engine code, settings or scoring changed. One new read-only tool: [`tools/ops/indicator_review_reads.py`](../tools/ops/indicator_review_reads.py).
@@ -82,6 +88,26 @@ Run 2026-10-07 20:35 UTC on the eight rows at `26c6629`, after my labels were wr
 - **Jev raised no economy flag.** The no_richer_option / richer_option_wrong disagreements both mean "no trade of information for work", so they do not change any read.
 - ⚠ **My own label flags `ICR-4`.** Option (b), its own boundary, leaves a self-describing edge in the live data that isolates the decay fix. My pick gives that up for one burst-path boundary instead of two, and leans on an offline replay for the attribution. **That is the economy class by `CLAUDE.md`'s three-step test. Treat (b) as the more truthful option**; I still read (a), but the call is yours with that trade stated.
 - **Harness 4 (doc scanner) on this doc**, key-less pass at `26c6629`: 0 version, value and pointer candidates; 0 missing-member and 0 line-past-end flags. All four Jev arms had 0 items, so the scanner exits `ENUMERATOR_SUSPECT` — by design a zero is a tripwire, not a clean bill.
+
+### 1b. `ICR-6` RSI half — the orchestrator's proposal (2026-10-07; the trader asked for "the most accurate/truthful option")
+
+**Facts, read in code and settings at `a87eeb4`:**
+- The entry vote is a **momentum** vote: long on `r.RSI > overbought` (60), partial long on `55 < RSI ≤ 60`; mirror for short (`Core/ScoringEngine_Calculate_Scoring.vb:182-185`).
+- `r.RSI = CalcRSI(candlesExec, 9)` (`UI/MainForm_Analysis.vb:264`), Wilder smoothing (`Core/Indicators_Momentum.vb:127-145`). So it runs on **1-minute bars in NY and 3-minute bars in ASIA and LONDON** (v36 execution resolution). `resolution_profiles["3"]` carries no RSI key: 60/40 applies at both.
+- `trader-profile.md` §5 states one RSI rule: hold while RSI(9) > 60, exit below 40 — "momentum intact", on the trader's **1-minute** chart.
+
+**Options:**
+
+| Option | What the design point is | Problem |
+|---|---|---|
+| **(a) Trader-rule anchor, carried across resolution** | 60/40 (partial 55/45) on 1-minute bars ARE the design point: the trader's own momentum-intact line. On 3-minute bars, the levels are the ones that mark the **same market state**: per session, on closed bars from the candle store, the 3-minute RSI(9) levels whose exceedance share over the same minutes equals the 1-minute RSI(9) > 60 (< 40, and the partial pair) share. Plus an RSI(9) parity test against the trader's chart, as for ADX | Needs new per-resolution RSI keys in `resolution_profiles["3"]` (a settings change, reserved). The mapping is a time-matched quantile match, not an outcome fit |
+| (b) Fire-share re-anchor (as queued 2026-10-01) | A chosen target share per session and resolution | The target share is a new number nobody has stated; it replaces the trader's rule with an invented one |
+| (c) Outcome-fit the levels | Whatever maximises net EV | Overfitting; it is `F-2`'s job (vote value), not a design point |
+| (d) Keep 60/40 at every resolution | The trader's 1-minute rule, applied unchanged to 3-minute bars | RSI(9) on 3-minute bars spans 27 minutes, so 60 there marks a different state than on the trader's chart. The vote's meaning differs by session with nothing in the code saying so |
+
+**Read: (a).** It is the only option where every level traces to something the trader stated, and where the code would say what is true: 1-minute levels are the trader's; 3-minute levels are derived to mean the same thing. (d) is cheaper and silently changes the meaning by resolution. Order: inside the ADX/RSI read (merged order step 8, this doc §4), after the forming-bar family, on closed bars only.
+
+⚠ **Not verified:** how far the 3-minute levels would move (not measured); whether the trader's chart RSI uses Wilder smoothing (code read only).
 
 ---
 
