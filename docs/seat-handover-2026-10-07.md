@@ -72,4 +72,6 @@
 
 ## 4. Harness 4 (doc scanner) on this handover
 
-Result appended below after the run.
+Run 2026-10-07 at `4ed4445` (`tools/checks/doc-scanner.ps1 -Docs docs/seat-handover-2026-10-07.md`; seat baseline written first):
+- Code-only checks: 0 version, value or pointer candidates; 0 dated-state, missing-member or stale-family flags.
+- 1 Jev item: the `A79g` fixture mention in §1 → `describes_this_fixture`, STABLE 5/5 (0.82), **agrees with the seat's label**. 5 Jev calls, 5,063 input tokens.
