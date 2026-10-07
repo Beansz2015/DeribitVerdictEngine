@@ -1,12 +1,17 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T21:30Z",
+  "updated_utc": "2026-10-07T21:20Z",
   "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — ICR-1..ICR-8 ruled except the ICR-6 RSI half (proposal awaiting confirmation); post-holiday order points at the adversarial review",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
+    {
+      "kind": "push",
+      "meaning": "Push master — 4 commits ahead of origin: the indicator-review rulings, the ICR-6 RSI proposal, RBM-7 confirmation, pane updates (no engine code)",
+      "since": "2026-10-07"
+    },
     {
       "kind": "ruling",
       "tick": true,
