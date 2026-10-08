@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-08T09:30Z",
-  "updated_by": "seat 2026-10-08, Opus 5.5 — RVS-1 and RVS-2 ruled; venue candle backfill started",
+  "updated_utc": "2026-10-08T14:30Z",
+  "updated_by": "seat 2026-10-08, Opus 5.5 — RSI/volume study session 2 run started",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -16,7 +16,7 @@
     },
     {
       "kind": "push",
-      "meaning": "Push master — 1 commit ahead of origin: the RSI/volume rule study session 1 (counts tool, session record, frozen thresholds, harness run; no engine code)",
+      "meaning": "Push master — 5 commits ahead of origin: the RSI/volume rule study session 1, the rulings, the venue candle backfill and re-run, the session-2 read tool (no engine code)",
       "since": "2026-10-08"
     }
   ],
@@ -30,12 +30,12 @@
       "anchor": "§5 deploy ledger"
     },
     {
-      "what": "RSI/volume rule study: venue 1-minute and 3-minute candle backfill 2023-01 to 2026-10, then the session-1 re-run on venue bars (read-only)",
+      "what": "RSI/volume rule study, session 2: the single outcome run (venue-candle indicators, trade-by-trade walk, Holm-labelled hypotheses)",
       "where": "local",
-      "started_utc": "2026-10-08T09:30Z",
-      "check": "ls C:/DeribitData/venue-candles",
-      "doc": "docs/rsi-volume-rule-study-session1-2026-10-08.md",
-      "anchor": "ruling box at the top, §13"
+      "started_utc": "2026-10-08T14:30Z",
+      "check": "docs/harness-runs/rsi-volume-rule-read-2026-10-08.md exists",
+      "doc": "docs/rsi-volume-rule-study-spec.md",
+      "anchor": "§5 and §8"
     }
   ],
   "dated": [
