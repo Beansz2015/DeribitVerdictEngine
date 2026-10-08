@@ -1,19 +1,12 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-08T15:10Z",
-  "updated_by": "seat 2026-10-08, Opus 5.5 — RSI/volume rule study done",
+  "updated_utc": "2026-10-08T17:45Z",
+  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — RSI/volume study reviewed and accepted (re-run reproduced)",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
-    {
-      "kind": "review",
-      "meaning": "Read the RSI/volume rule study result: no replacement beats either rule; keep the closed-bar volume vote and the mapped 60/40 (no engine change)",
-      "doc": "docs/rsi-volume-rule-study-read-2026-10-08.md",
-      "anchor": "§0 and §2",
-      "since": "2026-10-08"
-    },
     {
       "kind": "go",
       "meaning": "Update the read-only-key scope record to cover the collector and the gate clones, before any key goes on them (your raw-book ruling 2026-10-07; needed before the post-holiday probe run)",
@@ -23,7 +16,7 @@
     },
     {
       "kind": "push",
-      "meaning": "Push master — 6 commits ahead of origin: the RSI/volume rule study (session 1, rulings, venue candle backfill and re-run, session-2 tool and its read; no engine code)",
+      "meaning": "Push master — 7 commits ahead of origin: the RSI/volume rule study (session 1, rulings, venue candle backfill tool, session 2 read) and its review, pane updates (no engine code)",
       "since": "2026-10-08"
     }
   ],

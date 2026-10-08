@@ -1,5 +1,11 @@
 # RSI and volume rule study — the outcome read (2026-10-08 UTC)
 
+> ✅ **REVIEWED 2026-10-08 (UTC) by the orchestrator seat (Opus 5.5, high): ACCEPTED.** The conclusion (keep V0 and R0; no scoring change) follows from the pre-registered table.
+> - **Re-run here:** `H-7` → output MD5 `c7016874d297ea533fe569aeb9448efb`, identical to the committed run (this closes this doc §6's first "not verified" item). `H-8` self-test ALL PASS. The 11 copied statistics functions are AST-identical to `tools/ops/burst_outcome_read.py`. Commit order holds: frozen thresholds `3055be4` → read tool `25f3468` → output `7fb4f6e`. The `VOL-H1` ASIA label matches `finalize_label`/`label` (CONFIRMED needs both halves significant).
+> - **One wording correction (R-1):** §1's *"The power was there … small effects measured precisely"* holds for NY (CIs about ±0.2–0.5 bps), not for LONDON: LONDON CIs span about ±1.5–2 bps, and the worst cell's MDE80 is 7.4 bps. **NO DIFFERENCE SHOWN is not equivalence.** In LONDON a difference of 1–2 bps, material against 3 bps of fees, is not excluded. The decision is unchanged: the spec's §5 table changes a rule only on CONFIRMED.
+> - **The ASIA volume lead is weak and fading:** +1.42 bps on the full span, but 2026 reads −0.66 (§3). Carry it to `F-2` as the doc says, not as a finding.
+> - **Spec feedback accepted:** `E-1` as written in `rsi-volume-rule-study-spec.md` §6 tested the forming stub at a logged second the engine does not record — a defect in the spec, not the port. The `RVS-1` (d) venue-candle re-run is the better test.
+
 **Spec of record:** [`rsi-volume-rule-study-spec.md`](rsi-volume-rule-study-spec.md). **Session 1 and the rulings:** [`rsi-volume-rule-study-session1-2026-10-08.md`](rsi-volume-rule-study-session1-2026-10-08.md) (`RVS-1` = (d) venue candles; `RVS-2` = (c) gap sensitivity).
 **Tool:** [`tools/ops/rsi_volume_rule_read.py`](../tools/ops/rsi_volume_rule_read.py), committed at `25f3468` before its single run. **Full output:** [`harness-runs/rsi-volume-rule-read-2026-10-08.md`](harness-runs/rsi-volume-rule-read-2026-10-08.md).
 **Class:** analysis only. **It changes nothing in the engine.** Any engine change it led to would be a scoring change, reserved to the trader and after 2026-11-25.
