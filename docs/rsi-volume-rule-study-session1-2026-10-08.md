@@ -197,7 +197,7 @@ Run after this doc was written; my labels were written first. Run files: `docs/h
 
 ## 14. Re-run on the venue's own candles (`RVS-1` = (d), 2026-10-08)
 
-**Backfill:** [`tools/ops/venue_candle_backfill.py`](../tools/ops/venue_candle_backfill.py) → `C:\DeribitDataenue-candles\` (outside the repo). Public `get_tradingview_chart_data`, read-only.
+**Backfill:** [`tools/ops/venue_candle_backfill.py`](../tools/ops/venue_candle_backfill.py) → `C:\DeribitData\venue-candles\` (outside the repo). Public `get_tradingview_chart_data`, read-only.
 
 | Res | Calls | Candles 2023-01-01 → 2026-10-08 | Missing ticks | Duplicates |
 |---|---:|---:|---:|---:|
@@ -234,7 +234,7 @@ Run after this doc was written; my labels were written first. Run files: `docs/h
 
 | ID | Choice | Options | Why |
 |---|---|---|---|
-| `RVR-17` | Venue 3-minute candles taken from the venue's own 3-minute chart, not aggregated from venue 1-minute candles | aggregate 1-minute | The engine fetches the 3-minute resolution directly (`UI/MainForm_Analysis.vb:136`) |
+| `RVR-17` | Venue 3-minute candles taken from the venue's own 3-minute chart, not aggregated from venue 1-minute candles | aggregate 1-minute | The engine fetches the 3-minute resolution directly (`UI/MainForm_Analysis.vb:135`) |
 | `RVR-18` | A signal whose lookback holds a missing venue candle is dropped (`venue_missing`) | fill silently | The engine's list would differ there. Moot at this backfill: 0 missing |
 | `RVR-19` | Session 2's ATR(7) is computed on venue candles | trade-built bars as `liq-tradeflow-flip-study-spec.md` §4.8 did | `RVS-1` = (d) puts every indicator on the venue candles; the engine's ATR reads `candlesExec`. Entries, the walk and the gap check stay on trades |
 
