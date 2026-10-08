@@ -1,6 +1,6 @@
 # RSI and volume rule study — pre-registration (2026-10-07 UTC)
 
-**Status:** PRE-REGISTERED. **Session 1 DONE 2026-10-08 — STOPPED at §7 items 1 (`E-1` parity) and 4 (gap drops); session 2 waits on the trader's `RVS-1` and `RVS-2`** ([`rsi-volume-rule-study-session1-2026-10-08.md`](rsi-volume-rule-study-session1-2026-10-08.md) §8). No outcome has been computed. Written at `da5b047` (HEAD at writing); settings v69.
+**Status:** PRE-REGISTERED. **Session 1 DONE 2026-10-08 — STOPPED at §7 items 1 (`E-1` parity) and 4 (gap drops); `RVS-1` = (d) venue candles and `RVS-2` = (c) gap sensitivity, both RULED 2026-10-08** ([`rsi-volume-rule-study-session1-2026-10-08.md`](rsi-volume-rule-study-session1-2026-10-08.md) §8). No outcome has been computed. Written at `da5b047` (HEAD at writing); settings v69.
 **Asked by:** the trader, 2026-10-07: *"The 2 trading rules: RSI 60/40 and the 3x SMA(9) - is allowed to be changed if it means a more accurate analysis … What is the most accurate changes/replacements that can be made to those 2 rules?"*, then *"Yes to both, write the pre-registration now"*.
 **Class:** analysis only, read-only on the dev history stores. Auto-proceed class. **Every engine change it could lead to is a scoring change, reserved to the trader, and after 2026-11-25.**
 

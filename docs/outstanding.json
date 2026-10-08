@@ -1,30 +1,12 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-08T09:05Z",
-  "updated_by": "seat 2026-10-08, Opus 5.5 — RSI/volume rule study session 1 done, stopped at two gates",
+  "updated_utc": "2026-10-08T09:30Z",
+  "updated_by": "seat 2026-10-08, Opus 5.5 — RVS-1 and RVS-2 ruled; venue candle backfill started",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "RVS-1",
-      "meaning": "RSI/volume rule study: the parity check failed as specified — run the outcome study on the venue's own candles (my read, backfill first) or on the tape bars",
-      "doc": "docs/rsi-volume-rule-study-session1-2026-10-08.md",
-      "anchor": "§8, row RVS-1",
-      "since": "2026-10-08"
-    },
-    {
-      "kind": "ruling",
-      "tick": true,
-      "id": "RVS-2",
-      "meaning": "RSI/volume rule study: gap drops exceed 2% (venue maintenance at 09:00 UTC removes London days) — keep the registered rule plus a descriptive sensitivity (my read) or change it",
-      "doc": "docs/rsi-volume-rule-study-session1-2026-10-08.md",
-      "anchor": "§8, row RVS-2",
-      "since": "2026-10-08"
-    },
     {
       "kind": "go",
       "meaning": "Update the read-only-key scope record to cover the collector and the gate clones, before any key goes on them (your raw-book ruling 2026-10-07; needed before the post-holiday probe run)",
@@ -46,6 +28,14 @@
       "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
       "doc": "docs/aws-collector-deploy-checklist.md",
       "anchor": "§5 deploy ledger"
+    },
+    {
+      "what": "RSI/volume rule study: venue 1-minute and 3-minute candle backfill 2023-01 to 2026-10, then the session-1 re-run on venue bars (read-only)",
+      "where": "local",
+      "started_utc": "2026-10-08T09:30Z",
+      "check": "ls C:/DeribitData/venue-candles",
+      "doc": "docs/rsi-volume-rule-study-session1-2026-10-08.md",
+      "anchor": "ruling box at the top, §13"
     }
   ],
   "dated": [

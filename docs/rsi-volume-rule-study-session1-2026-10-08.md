@@ -4,7 +4,12 @@
 **Tool:** [`tools/ops/rsi_volume_rule_counts.py`](../tools/ops/rsi_volume_rule_counts.py). **Frozen thresholds:** [`rsi-volume-rule-study-frozen.json`](rsi-volume-rule-study-frozen.json).
 **Class:** analysis only, read-only on the stores. **No outcome was computed.** No entry price, level, walk or return exists in the tool.
 
-**Status: SESSION 1 DONE — STOPPED at `rsi-volume-rule-study-spec.md` §7 items 1 and 4.** Session 2 (the outcome run) does not start until the trader rules `RVS-1` and `RVS-2` (this doc §8).
+**Status: SESSION 1 DONE — STOPPED at `rsi-volume-rule-study-spec.md` §7 items 1 and 4. Both RULED 2026-10-08 (trader):**
+
+> **"RVS-1 = (d)"** — backfill the venue's own 1-minute and 3-minute REST candles for 2023-01 → 2026-10 and compute every indicator on them; trades stay the source for entries, the walk and the gap check.
+> **"RVS-2 = (c)"** — keep the registered gap rule as primary; session 2 adds a descriptive sensitivity that drops only on gaps inside the outcome window or the last 100 bars.
+
+Next: the venue candle backfill and a session-1 re-run on venue bars (this doc §13), then session 2. Probe 2026-10-08: the venue's `public/get_tradingview_chart_data` returns 1-minute and 3-minute BTC-PERPETUAL candles at 2023-01-01 00:00 UTC, empty minutes included (volume 0).
 
 ---
 
