@@ -1,12 +1,19 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-08T14:30Z",
-  "updated_by": "seat 2026-10-08, Opus 5.5 — RSI/volume study session 2 run started",
+  "updated_utc": "2026-10-08T15:10Z",
+  "updated_by": "seat 2026-10-08, Opus 5.5 — RSI/volume rule study done",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
+    {
+      "kind": "review",
+      "meaning": "Read the RSI/volume rule study result: no replacement beats either rule; keep the closed-bar volume vote and the mapped 60/40 (no engine change)",
+      "doc": "docs/rsi-volume-rule-study-read-2026-10-08.md",
+      "anchor": "§0 and §2",
+      "since": "2026-10-08"
+    },
     {
       "kind": "go",
       "meaning": "Update the read-only-key scope record to cover the collector and the gate clones, before any key goes on them (your raw-book ruling 2026-10-07; needed before the post-holiday probe run)",
@@ -16,7 +23,7 @@
     },
     {
       "kind": "push",
-      "meaning": "Push master — 5 commits ahead of origin: the RSI/volume rule study session 1, the rulings, the venue candle backfill and re-run, the session-2 read tool (no engine code)",
+      "meaning": "Push master — 6 commits ahead of origin: the RSI/volume rule study (session 1, rulings, venue candle backfill and re-run, session-2 tool and its read; no engine code)",
       "since": "2026-10-08"
     }
   ],
@@ -28,14 +35,6 @@
       "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
       "doc": "docs/aws-collector-deploy-checklist.md",
       "anchor": "§5 deploy ledger"
-    },
-    {
-      "what": "RSI/volume rule study, session 2: the single outcome run (venue-candle indicators, trade-by-trade walk, Holm-labelled hypotheses)",
-      "where": "local",
-      "started_utc": "2026-10-08T14:30Z",
-      "check": "docs/harness-runs/rsi-volume-rule-read-2026-10-08.md exists",
-      "doc": "docs/rsi-volume-rule-study-spec.md",
-      "anchor": "§5 and §8"
     }
   ],
   "dated": [
