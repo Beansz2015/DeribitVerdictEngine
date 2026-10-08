@@ -1,16 +1,29 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-07T22:05Z",
-  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — ICR-6 RSI half confirmed; RSI/volume rule study pre-registered",
+  "updated_utc": "2026-10-08T09:05Z",
+  "updated_by": "seat 2026-10-08, Opus 5.5 — RSI/volume rule study session 1 done, stopped at two gates",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
     {
-      "kind": "push",
-      "meaning": "Push master — 7 commits ahead of origin: the indicator-review rulings, the ICR-6 RSI proposal and confirmation, the RSI/volume rule study pre-registration, RBM-7 confirmation, pane updates (no engine code)",
-      "since": "2026-10-07"
+      "kind": "ruling",
+      "tick": true,
+      "id": "RVS-1",
+      "meaning": "RSI/volume rule study: the parity check failed as specified — run the outcome study on the venue's own candles (my read, backfill first) or on the tape bars",
+      "doc": "docs/rsi-volume-rule-study-session1-2026-10-08.md",
+      "anchor": "§8, row RVS-1",
+      "since": "2026-10-08"
+    },
+    {
+      "kind": "ruling",
+      "tick": true,
+      "id": "RVS-2",
+      "meaning": "RSI/volume rule study: gap drops exceed 2% (venue maintenance at 09:00 UTC removes London days) — keep the registered rule plus a descriptive sensitivity (my read) or change it",
+      "doc": "docs/rsi-volume-rule-study-session1-2026-10-08.md",
+      "anchor": "§8, row RVS-2",
+      "since": "2026-10-08"
     },
     {
       "kind": "go",
@@ -18,6 +31,11 @@
       "doc": "docs/history-host-and-raw-channel-read-2026-09-28.md",
       "anchor": "§4, the read-only-key scope record",
       "since": "2026-10-07"
+    },
+    {
+      "kind": "push",
+      "meaning": "Push master — 1 commit ahead of origin: the RSI/volume rule study session 1 (counts tool, session record, frozen thresholds, harness run; no engine code)",
+      "since": "2026-10-08"
     }
   ],
   "in_progress": [
@@ -58,12 +76,6 @@
     }
   ],
   "next_up": [
-    {
-      "what": "RSI/volume rule study, session 1: build closed bars from the history stores, port the indicators, parity check, frozen thresholds, outcome-blind counts and power (read-only; can run before or after the holiday)",
-      "doc": "docs/rsi-volume-rule-study-spec.md",
-      "anchor": "§1, §6, §7",
-      "model": "Opus 5.5, high"
-    },
     {
       "what": "After 2026-11-25: first fetch, closing history comparison, then the stage-4 pass rule (run dates, 14 days)",
       "doc": "docs/history-data-store-build-spec-back.md",

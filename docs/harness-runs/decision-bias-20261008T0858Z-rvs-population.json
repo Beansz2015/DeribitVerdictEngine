@@ -1,0 +1,77 @@
+{
+ "rev": "d4414944e6737d66456219b34ce1ec51a2818c87",
+ "rev7": "d441494",
+ "stamp_utc": "20261008T0858Z",
+ "builder": "seat 2026-10-08, RSI/volume study session 1",
+ "note": "STATE ONLY",
+ "items": [
+  {
+   "id": "docs/rsi-volume-rule-study-session1-2026-10-08.md|RVS-1@d441494",
+   "question": "An outcome study of two indicator rules builds its bars from the exchange's full trade tape. A parity check against the live engine failed: the engine reads the exchange's own candles, whose high, low and close leave out a few prints that the tape includes (about 0.5% of closes differ; volume is identical), and the forming bar cannot be timed from the log. At the vote level the tape bars agree with the exchange candles on 99.76% to 100% of bars. What should the outcome study run on?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "proceed on the tape bars as built and record the parity failure with its decomposition",
+     "src": "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+    },
+    {
+     "label": "(b)",
+     "text": "re-register the parity check as a vote-level test on closed bars, keep the tolerance tests descriptive, then run on the tape bars",
+     "src": "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+    },
+    {
+     "label": "(c)",
+     "text": "identify the exchange's filter and rebuild the tape bars to match it",
+     "src": "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+    },
+    {
+     "label": "(d)",
+     "text": "backfill the exchange's own 1-minute and 3-minute candles for the whole span and compute every indicator on them, keeping trades for entries, outcome walks and gap checks",
+     "src": "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+    }
+   ],
+   "recommended": "(d)",
+   "rationale": "(d) measures the votes on exactly what the engine reads. (c) is blocked: no column in the trade store identifies the left-out prints. (a) and (b) would rest on the agreement being adequate, which is an economy argument. Fall back to (b) only if the exchange does not serve candles for the whole span.",
+   "question_src": "docs/rsi-volume-rule-study-session1-2026-10-08.md",
+   "rationale_src": [
+    "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+   ],
+   "state_rev": "d4414944e6737d66456219b34ce1ec51a2818c87",
+   "provenance": "live_recommendation"
+  },
+  {
+   "id": "docs/rsi-volume-rule-study-session1-2026-10-08.md|RVS-2@d441494",
+   "question": "A pre-registered outcome study drops any signal whose 250-bar lookback or outcome window touches a run of more than 5 empty minutes. Outcome-blind counts show this drops 4.5% to 12% of bars in some session-years, mainly because scheduled exchange maintenance at 09:00 UTC removes whole London days. The gaps are genuine no-trade minutes, and statistical power is ample. What should be done?",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "keep the registered gap rule and record where the gaps sit",
+     "src": "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+    },
+    {
+     "label": "(b)",
+     "text": "change the primary rule to exempt scheduled maintenance gaps",
+     "src": "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+    },
+    {
+     "label": "(c)",
+     "text": "keep the registered rule as primary and add a descriptive sensitivity arm that drops only on gaps inside the outcome window or the last 100 bars",
+     "src": "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+    },
+    {
+     "label": "(d)",
+     "text": "shorten the lookback span the gap check covers, in the primary rule",
+     "src": "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "The dropped days are chosen by the exchange's schedule, not by market state, so the primary drops carry no outcome information. (b) and (d) change a pre-registered rule after seeing counts, which the study's freezing rule forbids. (c) records the extra data without moving the primary.",
+   "question_src": "docs/rsi-volume-rule-study-session1-2026-10-08.md",
+   "rationale_src": [
+    "docs/rsi-volume-rule-study-session1-2026-10-08.md"
+   ],
+   "state_rev": "d4414944e6737d66456219b34ce1ec51a2818c87",
+   "provenance": "live_recommendation"
+  }
+ ]
+}
