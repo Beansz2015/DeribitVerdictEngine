@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-08T17:45Z",
-  "updated_by": "orchestrator seat 2026-10-07, Opus 5.5 — RSI/volume study reviewed and accepted (re-run reproduced)",
+  "updated_utc": "2026-10-08T18:10Z",
+  "updated_by": "orchestrator seat, Opus 5.5 — interim burst-watch read (both sessions below the reference); official read moved to the 10-13 fetch",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -16,7 +16,7 @@
     },
     {
       "kind": "push",
-      "meaning": "Push master — 7 commits ahead of origin: the RSI/volume rule study (session 1, rulings, venue candle backfill tool, session 2 read) and its review, pane updates (no engine code)",
+      "meaning": "Push master — 8 commits ahead of origin: the RSI/volume rule study and its review, the interim burst-watch read, pane updates (no engine code)",
       "since": "2026-10-08"
     }
   ],
@@ -32,14 +32,8 @@
   ],
   "dated": [
     {
-      "date": "2026-10-09",
-      "approx": true,
-      "what": "ASIA and NY burst-watch reads on the ATR-conditional reference (tools/ops/burst-watch-read.ps1)",
-      "doc": "docs/avr1-atr-conditional-burst-watch-spec.md"
-    },
-    {
       "date": "2026-10-13",
-      "what": "Final collector read-back and fetch — last working day before the holiday",
+      "what": "Final collector read-back and fetch — last working day before the holiday; then the OFFICIAL ASIA and NY burst-watch reads (the interim read 2026-10-08 runs below the reference in both sessions)",
       "doc": "docs/trader-tick-queue.md",
       "anchor": "TRADER AWAY table, row 5"
     },
