@@ -70,6 +70,7 @@ GAP_RUN = 5                                      # a gap = more than 5 consecuti
 V1_DAYS = 20                                     # V1 baseline: same slot, previous 20 weekdays
 V2_WIN = 100                                     # V2: percentile rank within the previous 100 bars
 DYN_WIN = 100                                    # DynamicNorms: 100 completed bars before the signal bar
+SENS_BARS = 100                                  # RVS-2 = (c): the gap sensitivity's lookback reach, bars
 ATR_BARS = 50                                    # ATR(7) over the last 50 completed bars (spec section 4.7)
 HOLD_MIN = {"NY": 15, "ASIA": 45, "LONDON": 45}  # outcome window W, also the episode window
 SESSIONS = ("ASIA", "LONDON", "NY")
@@ -321,6 +322,42 @@ def aggregate(b1, res):
     return Bars(res, o, h, l, c, vb, vu, n)
 
 
+def load_venue_bars(vdir, res, cut, out=print):
+    """Ruling RVS-1 = (d): the venue's own candles (tools/ops/venue_candle_backfill.py output) as res-minute Bars on
+    the START grid. A tick the venue did not return is filled with the previous close and volume 0, n = 0, and its
+    1-minute span is flagged in `missing` (bytearray over 1-minute bars) for the drop rule."""
+    M = (ms(cut) // 60000 - START_MIN) // res
+    o = array("d", bytes(8 * M)); h = array("d", bytes(8 * M)); l = array("d", bytes(8 * M)); c = array("d", bytes(8 * M))
+    vb = array("d", bytes(8 * M)); vu = array("d", bytes(8 * M)); n = array("i", bytes(4 * M))
+    have = bytearray(M)
+    for name in sorted(os.listdir(vdir)):
+        if not (name.startswith("candles_%dm_" % res) and name.endswith(".csv")):
+            continue
+        with open(os.path.join(vdir, name), encoding="utf-8") as f:
+            f.readline()
+            for line in f:
+                a = line.rstrip("\r\n").split(",")
+                k = int(a[0]) // 60000 - START_MIN
+                if k < 0 or k % res or k // res >= M:
+                    continue
+                j = k // res
+                o[j], h[j], l[j], c[j], vb[j], vu[j] = (float(x) for x in a[1:7])
+                n[j] = 1 if vb[j] > 0 else 0
+                have[j] = 1
+    missing = bytearray((M * res))
+    nmiss = 0
+    prev = next(c[j] for j in range(M) if have[j])
+    for j in range(M):
+        if not have[j]:
+            o[j] = h[j] = l[j] = c[j] = prev
+            nmiss += 1
+            for x in range(j * res, j * res + res):
+                missing[x] = 1
+        prev = c[j]
+    out("venue %d-minute bars: %d on the grid, %d returned, %d missing (filled: previous close, volume 0)" % (res, M, M - nmiss, nmiss))
+    return Bars(res, o, h, l, c, vb, vu, n), missing
+
+
 def gap_prefix(b1):
     """Prefix count of minutes that sit inside a gap (a run of more than GAP_RUN consecutive empty 1-minute bars)."""
     N = len(b1)
@@ -466,7 +503,7 @@ def weekday_of_min(m):
     return (m // 1440 + 3) % 7          # 1970-01-01 is a Thursday; Monday = 0
 
 
-def evaluate(b, sess_set, gpre, cut_min, P, out=print):
+def evaluate(b, sess_set, gpre, cut_min, P, out=print, mpre=None):
     """Every weekday bar at resolution b.res whose close hour falls in one of sess_set. Returns a list of dict rows
     in time order (all of them, eligible or not), plus 1-minute RSI rows for the R0 mapping when b.res == 1."""
     res = b.res
@@ -504,10 +541,18 @@ def evaluate(b, sess_set, gpre, cut_min, P, out=print):
             r["drop"] = "window_past_cut"
         elif gpre[cm + W - START_MIN] - gpre[lb0] > 0:
             r["drop"] = "gap"
+        elif mpre is not None and mpre[cm - START_MIN] - mpre[lb0] > 0:
+            r["drop"] = "venue_missing"
         elif v1 is None:
             r["drop"] = "warmup"
         else:
             r["drop"] = None
+        # RVS-2 = (c): the descriptive sensitivity drops on a gap only inside the outcome window or the last 100 bars
+        if r["drop"] == "gap":
+            r["drop_s"] = "gap" if gpre[cm + W - START_MIN] - gpre[cm - SENS_BARS * res - START_MIN] > 0 else (
+                "warmup" if v1 is None else None)
+        else:
+            r["drop_s"] = r["drop"]
         r["seam"] = (lb0 + START_MIN) < SEAM_MIN <= cm
         c = b.c
         r["close"] = c[i]
@@ -680,12 +725,13 @@ def episodes(rows, F, h1):
     last = {}
     cnt = Counter()
     eps = []
-    h1_last = max(h1)
+    eps_s = []
+    h1_last, h1_first = max(h1), min(h1)
     for r in rows:
         if r["drop"] == "warmup" and "rsi" not in r:
             continue
         # days before H1's first day hold only warm-up drops; they belong to neither half
-        half = "H1" if r["day"] in h1 else ("H2" if r["day"] > h1_last else "pre")
+        half = "H1" if h1_first <= r["day"] <= h1_last else ("H2" if r["day"] > h1_last else "pre")
         W = HOLD_MIN[r["sess"]]
         fs = fires(r, F)
         for rule, side in fs.items():
@@ -693,12 +739,16 @@ def episodes(rows, F, h1):
             prev = last.get(key)
             last[key] = r["cm"]
             base = (rule, r["sess"], half)
+            is_ep = prev is None or r["cm"] - prev >= W
+            if r.get("drop_s") is None and is_ep:
+                cnt[base + ("episodes_s",)] += 1
+                eps_s.append((rule, side, r))
             if r["drop"] is not None:
                 cnt[base + ("drop_" + r["drop"],)] += 1
                 continue
             cnt[base + ("signals",)] += 1
             cnt[base + ("signals_" + side,)] += 1
-            if prev is not None and r["cm"] - prev < W:
+            if not is_ep:
                 continue
             cnt[base + ("episodes",)] += 1
             cnt[base + ("episodes_" + side,)] += 1
@@ -708,7 +758,7 @@ def episodes(rows, F, h1):
         if r["drop"] is None:
             for rule, side in partials(r, F).items():
                 cnt[(rule, r["sess"], half, "partial_" + side)] += 1
-    return cnt, eps
+    return cnt, eps, eps_s
 
 
 # ---------------------------------------------------------------- power (a4_liq_ofi_counts.py power block, copied)
@@ -734,7 +784,16 @@ def fmt(x, nd=1):
 
 
 # ---------------------------------------------------------------- the run
-def run(stores, cut, P, out=print, workers=12):
+def prefix_of(mask):
+    pre = array("i", bytes(4 * (len(mask) + 1)))
+    t = 0
+    for x in range(len(mask)):
+        t += mask[x]
+        pre[x + 1] = t
+    return pre
+
+
+def run(stores, cut, P, out=print, workers=12, venue_dir=None):
     t0 = time.time()
     groups, paths = store_paths(stores, cut)
     out("store files: %d in %d stores, bytes %d" % (len(paths), len(groups), sum(os.path.getsize(p) for p in paths)))
@@ -768,8 +827,15 @@ def run(stores, cut, P, out=print, workers=12):
                                                                         "  ".join("%s %s %d" % x for x in wk9)))
     b3 = aggregate(b1, 3)
     out("3-minute bars: %d" % len(b3))
-    rowsA, rsi1 = evaluate(b1, {"NY"}, gpre, cut_min, P, out)
-    rowsB, _ = evaluate(b3, {"ASIA", "LONDON"}, gpre, cut_min, P, out)
+    m1 = m3 = None
+    if venue_dir:
+        # RVS-1 = (d): every indicator on the venue's own candles; the tape keeps the gap check (and, in session 2,
+        # entries and the walk)
+        b1, miss1 = load_venue_bars(venue_dir, 1, cut, out)
+        b3, miss3 = load_venue_bars(venue_dir, 3, cut, out)
+        m1, m3 = prefix_of(miss1), prefix_of(miss3)
+    rowsA, rsi1 = evaluate(b1, {"NY"}, gpre, cut_min, P, out, m1)
+    rowsB, _ = evaluate(b3, {"ASIA", "LONDON"}, gpre, cut_min, P, out, m3)
     r1rows = rsi1_rows(b1, rsi1, gpre, P)
     rows = sorted(rowsA + rowsB, key=lambda r: r["cm"])
     out("evaluated weekday bars: NY %d, ASIA+LONDON %d  (%.0fs)" % (len(rowsA), len(rowsB), time.time() - t0))
@@ -785,7 +851,8 @@ def run(stores, cut, P, out=print, workers=12):
     F = freeze(by_sess, r1rows, h1, P, out)
     F["meta"] = {"D": D, "H1_first": str(dd(h1_days[0])), "H1_last": str(dd(h1_days[-1])), "H2_first": str(dd(h2_days[0])),
                  "H2_last": str(dd(h2_days[-1])), "cut": cut.isoformat(), "settings_version": P["version"],
-                 "volume_unit": "BTC (sum Amount/Price), RVR-10"}
+                 "volume_unit": "BTC (sum Amount/Price), RVR-10",
+                 "bars_source": ("venue REST candles (RVS-1 = (d)) from %s" % venue_dir) if venue_dir else "trade tape"}
     return b1, b3, gpre, rows, by_sess, D, h1, F, bstats
 
 
@@ -849,21 +916,23 @@ def report(b1, b3, gpre, rows, by_sess, D, h1, F, P, out=print):
     seam_bars = sum(1 for r in rows if r["drop"] is None and r.get("seam"))
     out("eligible signal bars whose lookback crosses the 2025-01-01 store seam: %d (kept: the seam is TradeSeq-contiguous)" % seam_bars)
 
-    cnt, eps = episodes(rows, F, h1)
+    cnt, eps, eps_s = episodes(rows, F, h1)
     out("")
     out("=== 6. Counts per rule x session x half (signals = full fires on eligible bars; episodes = de-clustered by W) ===")
-    out("%-6s %-7s %-3s %9s %9s %8s %8s %8s %8s %7s %8s %8s %9s"
-        % ("rule", "session", "hlf", "signals", "episodes", "ep_L", "ep_S", "drop_gap", "drop_wu", "drop_cut", "part_L", "part_S", "ep_seam"))
+    out("%-6s %-7s %-3s %9s %9s %8s %8s %8s %8s %7s %8s %8s %9s %8s %9s"
+        % ("rule", "session", "hlf", "signals", "episodes", "ep_L", "ep_S", "drop_gap", "drop_wu", "drop_cut", "part_L", "part_S", "ep_seam",
+           "drop_vm", "ep_sens"))
     for rule in RULES:
         for s in SESSIONS:
             for hf in ("H1", "H2"):
                 k = (rule, s, hf)
                 pr = "V0p" if rule == "V0" else ("R0p" if rule == "R0" else None)
-                out("%-6s %-7s %-3s %9d %9d %8d %8d %8d %8d %7d %8s %8s %9d"
+                out("%-6s %-7s %-3s %9d %9d %8d %8d %8d %8d %7d %8s %8s %9d %8d %9d"
                     % (rule, s, hf, cnt[k + ("signals",)], cnt[k + ("episodes",)], cnt[k + ("episodes_L",)], cnt[k + ("episodes_S",)],
                        cnt[k + ("drop_gap",)], cnt[k + ("drop_warmup",)], cnt[k + ("drop_window_past_cut",)],
                        cnt[(pr, s, hf, "partial_L")] if pr else "-", cnt[(pr, s, hf, "partial_S")] if pr else "-",
-                       cnt[k + ("episodes_seam",)]))
+                       cnt[k + ("episodes_seam",)], cnt[k + ("drop_venue_missing",)], cnt[k + ("episodes_s",)]))
+    out("ep_sens = episodes in the RVS-2 = (c) sensitivity population (gap drop only inside the outcome window or the last %d bars)" % SENS_BARS)
 
     pre = Counter()
     for (rule, s, hf, kind), v in cnt.items():
@@ -923,7 +992,7 @@ def report(b1, b3, gpre, rows, by_sess, D, h1, F, P, out=print):
 
 
 # ---------------------------------------------------------------- E-1 parity
-def parity(fetch, stores, P, out=print, cutoff_shift_ms=0):
+def parity(fetch, stores, P, out=print, cutoff_shift_ms=0, venue=None):
     """Rebuild the engine's candle list as of each analysis_log.csv row's Timestamp: the LOOKBACK - 1 completed bars
     plus the forming stub from the trades before the cutoff, at the row's ExecResolution. Port RSI, ROC, VolumeRatio
     and VWAP; compare with the logged values."""
@@ -1006,6 +1075,13 @@ def parity(fetch, stores, P, out=print, cutoff_shift_ms=0):
             b0 = open_min - j * res - m_lo
             if b0 < 0:
                 break
+            if venue is not None:
+                vc = venue[res].get(open_min - j * res)
+                if vc is not None:                   # RVS-1 = (d): the venue's own completed candle
+                    bars.append((vc[0], vc[1], vc[2], vc[3], vc[4], open_min - j * res))
+                    res_stats[res]["venue_bars"] += 1
+                    continue
+                res_stats[res]["tape_bars_no_venue"] += 1
             ks = range(b0, b0 + res)
             nz = [k for k in ks if n[k]]
             if nz:
@@ -1089,7 +1165,8 @@ def parity(fetch, stores, P, out=print, cutoff_shift_ms=0):
         q = lambda k: 100.0 * c[k] / nn
         p99 = lambda k: sorted(diffs[(res, k)])[int(0.99 * (nn - 1))]
         p50 = lambda k: sorted(diffs[(res, k)])[int(0.50 * (nn - 1))]
-        out("  res %d min: rows %d  stub with trades %d / empty %d" % (res, nn, c["stub_with_trades"], c["stub_empty"]))
+        out("  res %d min: rows %d  stub with trades %d / empty %d%s" % (res, nn, c["stub_with_trades"], c["stub_empty"],
+            ("  completed bars from venue %d, from tape (no venue candle) %d" % (c["venue_bars"], c["tape_bars_no_venue"])) if venue else ""))
         out("    within tolerance: RSI<=0.5 %.2f%%  ROC<=0.01 %.2f%%  VolumeRatio<=2%% %.2f%%  VWAP<=0.5 USD %.2f%%  all four %.2f%%  (VWAP candle count equal %.2f%%)"
             % (q("rsi_ok"), q("roc_ok"), q("vr_ok"), q("vw_ok"), q("all4"), q("vwn_eq")))
         out("    p50 / p99 |diff|: RSI %.4f / %.4f  ROC %.5f / %.5f  VolumeRatio rel %.4f / %.4f  VWAP %.3f / %.3f USD;  VolumeRatio signed rel median %+.4f"
@@ -1282,6 +1359,8 @@ def main():
     ap.add_argument("--settings", default="settings.json")
     ap.add_argument("--parity", metavar="FETCH", help="run E-1 against FETCH/analysis_log.csv instead of the counts")
     ap.add_argument("--venue-candles", metavar="DIR", help="E-1b: closed tape bars vs the venue REST candles in DIR")
+    ap.add_argument("--venue-bars", metavar="DIR", help="RVS-1 = (d): compute every indicator on the venue candles in DIR "
+                                                         "(tools/ops/venue_candle_backfill.py output); the tape keeps the gap check")
     ap.add_argument("--workers", type=int, default=12)
     ap.add_argument("--no-freeze-write", action="store_true", help="do not write docs/rsi-volume-rule-study-frozen.json")
     ap.add_argument("--selftest", action="store_true")
@@ -1293,10 +1372,12 @@ def main():
     if a.parity:
         print("RSI/volume rule study - E-1 parity (evidence). docs/rsi-volume-rule-study-spec.md section 6")
         print("pins: settings v%d" % P["version"])
-        v0 = parity(a.parity, stores, P)
+        ven = {r: load_venue(a.venue_bars, r) for r in (1, 3)} if a.venue_bars else None
+        print("completed bars: %s" % (("venue candles, " + a.venue_bars) if ven else "trade tape"))
+        v0 = parity(a.parity, stores, P, venue=ven)
         print("")
         print("sensitivity: cutoff at the end of the logged second")
-        parity(a.parity, stores, P, cutoff_shift_ms=1000)
+        parity(a.parity, stores, P, cutoff_shift_ms=1000, venue=ven)
         sys.exit(0 if v0 else 2)
     cut = datetime.strptime(a.cut, "%Y-%m-%d")
     if a.venue_candles:
@@ -1307,7 +1388,8 @@ def main():
           "multipliers %s; VWAP anchor 00:00 and %02d:%02d; ATR(%d) over %d bars; W %s; span %s .. %s exclusive"
           % (P["version"], P["rsi_period"], P["roc_period"], P["sma_period"], P["hi_min"], P["hi_max"], P["mid_min"], P["mid_max"],
              P["static_high"], P["static_mid"], P["hmult"], P["vwap_h"], P["vwap_m"], P["atr_period"], ATR_BARS, HOLD_MIN, START.date(), cut.date()))
-    b1, b3, gpre, rows, by_sess, D, h1, F, bstats = run(stores, cut, P, workers=a.workers)
+    print("bars source: %s" % (("venue candles, " + a.venue_bars) if a.venue_bars else "trade tape"))
+    b1, b3, gpre, rows, by_sess, D, h1, F, bstats = run(stores, cut, P, workers=a.workers, venue_dir=a.venue_bars)
     report(b1, b3, gpre, rows, by_sess, D, h1, F, P)
     if not a.no_freeze_write:
         with open(FROZEN_PATH, "w", encoding="utf-8", newline="\n") as f:

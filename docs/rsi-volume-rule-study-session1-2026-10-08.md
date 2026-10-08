@@ -194,3 +194,47 @@ Run after this doc was written; my labels were written first. Run files: `docs/h
 - **Where it slips:** (1) the entry is the first trade at or after the signal bar's close — not the bar's close price; (2) the 1-minute walk needs trade-level resolution only where one minute touches both levels — do not resolve those from OHLC; (3) the frozen JSON must be re-derived and asserted equal, never edited.
 - **Escalation trigger:** any recomputed frozen threshold that differs from `docs/rsi-volume-rule-study-frozen.json`.
 - **If `RVS-1` = (d):** add one session before session 2 for the venue candle backfill and a re-run of session 1 on it (Opus 5.5 · medium; the bar and indicator code is in place).
+
+## 14. Re-run on the venue's own candles (`RVS-1` = (d), 2026-10-08)
+
+**Backfill:** [`tools/ops/venue_candle_backfill.py`](../tools/ops/venue_candle_backfill.py) → `C:\DeribitDataenue-candles\` (outside the repo). Public `get_tradingview_chart_data`, read-only.
+
+| Res | Calls | Candles 2023-01-01 → 2026-10-08 | Missing ticks | Duplicates |
+|---|---:|---:|---:|---:|
+| 1 min | 397 | 1,981,440 | 0 | 0 |
+| 3 min | 133 | 660,480 | 0 | 0 |
+
+- **Smoke check:** a 2026-09-19 → 09-22 backfill matches the earlier stored venue candles (`backtest_data/candles_*_2026-09.csv`) on every common bar except the stored file's last bar, which was saved while still forming.
+- **The venue returns a candle for every minute, empty minutes included** (volume 0).
+
+**Handles (venue bars):**
+
+| Handle | Command | Result |
+|---|---|---|
+| `H-5` | `python -I tools/ops/rsi_volume_rule_counts.py --stores C:\DeribitData\history-2023-2024 C:\DeribitData\history --cut 2026-10-06 --venue-bars C:/DeribitData/venue-candles` | Output MD5 `41c816688edda26e365716af929b57c5`. Rewrites the frozen JSON (`meta.bars_source` = venue) |
+| `H-6` | `python -I tools/ops/rsi_volume_rule_counts.py --parity aws_fetch/20261007-180541 --venue-bars C:/DeribitData/venue-candles` | `E-1` with venue completed bars (below); exit 2 as specified |
+
+**`E-1` with the venue's completed bars and the stub from trades:**
+
+| Res | RSI ≤ 0.5 | ROC ≤ 0.01 | VolumeRatio ≤ 2 % | VWAP ≤ 0.5 USD | Decomposition (stub close = logged `Price`): RSI · ROC, all rows |
+|---|---:|---:|---:|---:|---|
+| 1 min | 84.75 % | 94.97 % | 62.62 % | **98.67 %** (tape: 82.59 %) | **99.65 % · 99.77 %** |
+| 3 min | 85.37 % | 94.58 % | 54.25 % | **99.49 %** (tape: 91.54 %) | **99.67 % · 99.91 %** |
+
+- **The venue's REST candles are the engine's completed candles.** VWAP and the closed-bar RSI/ROC decomposition move to ≈ 99–99.9 %. Every miss left in the spec's test sits in the forming stub, which the study does not use.
+
+**Session 1 on venue bars:**
+- **Gates:** STOP 2 PASS (NY 2.13 %, ASIA 3.09 %, LONDON 3.04 %); STOP 3 none; STOP 4 fires as before (the gap check stays on the trade tape) and is covered by `RVS-2` = (c). Venue missing-candle drops: 0.
+- **Halves unchanged:** D = 961; H1 2023-01-30 → 2024-11-29; H2 2024-12-02 → 2026-10-05.
+- **Thresholds moved slightly:** R0 ASIA U/L 58.669 / 41.474 (tape 58.685 / 41.454); LONDON 58.961 / 41.424; R1 and k₁/k₂ within 0.01 of the tape values. **The tape-based frozen JSON is superseded; it stays in git at `3cbc6b3`.**
+- **Episodes** move by a handful per cell (e.g. V0 NY 7,840 vs 7,856). Power unchanged: worst cell LONDON `VOL-H2`, MDE80 7.4 bps at α 0.05/9.
+- **`RVS-2` sensitivity population** (the counts tool's `ep_sens` column): every cell gains 0–8 % episodes (e.g. R0 ASIA H1 2,453 → 2,538).
+
+**Choices auto-proceeded for the re-run:**
+
+| ID | Choice | Options | Why |
+|---|---|---|---|
+| `RVR-17` | Venue 3-minute candles taken from the venue's own 3-minute chart, not aggregated from venue 1-minute candles | aggregate 1-minute | The engine fetches the 3-minute resolution directly (`UI/MainForm_Analysis.vb:136`) |
+| `RVR-18` | A signal whose lookback holds a missing venue candle is dropped (`venue_missing`) | fill silently | The engine's list would differ there. Moot at this backfill: 0 missing |
+| `RVR-19` | Session 2's ATR(7) is computed on venue candles | trade-built bars as `liq-tradeflow-flip-study-spec.md` §4.8 did | `RVS-1` = (d) puts every indicator on the venue candles; the engine's ATR reads `candlesExec`. Entries, the walk and the gap check stay on trades |
+
