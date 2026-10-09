@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-08T18:40Z",
-  "updated_by": "orchestrator seat, Opus 5.5 — HH-2 key scope widened by the trader (item closed)",
+  "updated_utc": "2026-10-08T18:55Z",
+  "updated_by": "orchestrator seat, Opus 5.5 — burst-watch official reads split out to 2026-10-10 (trader agreed)",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,7 +9,7 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 9 commits ahead of origin: the RSI/volume rule study and its review, the interim burst-watch read, the read-only-key scope widening, pane updates (no engine code)",
+      "meaning": "Push master — 10 commits ahead of origin: the RSI/volume rule study and its review, the interim burst-watch read, the read-only-key scope widening, pane updates (no engine code)",
       "since": "2026-10-08"
     }
   ],
@@ -25,8 +25,14 @@
   ],
   "dated": [
     {
+      "date": "2026-10-10",
+      "what": "Official ASIA and NY burst-watch reads (10th covered weekday = the 2026-10-09 sessions; NY's closes 2026-10-10 00:00 UTC = 08:00 GMT+8). Interim read 2026-10-08: both below the reference",
+      "doc": "docs/burst-watch-read-2026-10-08.md",
+      "anchor": "§0"
+    },
+    {
       "date": "2026-10-13",
-      "what": "Final collector read-back and fetch — last working day before the holiday; then the OFFICIAL ASIA and NY burst-watch reads (the interim read 2026-10-08 runs below the reference in both sessions)",
+      "what": "Final collector read-back and fetch — last working day before the holiday, as late in the day as possible; re-run the burst-watch reads here only if 2026-10-10 was a covered day short",
       "doc": "docs/trader-tick-queue.md",
       "anchor": "TRADER AWAY table, row 5"
     },

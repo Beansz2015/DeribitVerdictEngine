@@ -2,7 +2,7 @@
 
 **Spec:** [`avr1-atr-conditional-burst-watch-spec.md`](avr1-atr-conditional-burst-watch-spec.md) §5 (the ATR-conditional reference, trader ruling `AVR-1` (b), 2026-09-26). **Tool:** `tools/ops/burst-watch-read.ps1`. **Fetch:** `aws_fetch/20261008-174358` (fetch verified; venue check CLEAN; history comparison PASS). Seat: Opus 5.5, low → raised to medium when every day read below the reference.
 
-⚠ **INTERIM.** The ruled length is ≥ 10 covered weekday session-days after 2026-09-25. ASIA has 9 and NY has 7 at this fetch. ASIA's 10th is the 2026-10-09 session (closes 08:00 UTC); NY's is the 2026-10-09 session (closes 2026-10-10 00:00 UTC). **The official read runs on the 2026-10-13 final fetch.**
+⚠ **INTERIM.** The ruled length is ≥ 10 covered weekday session-days after 2026-09-25. ASIA has 9 and NY has 7 at this fetch. ASIA's 10th is the 2026-10-09 session (closes 08:00 UTC); NY's is the 2026-10-09 session (closes 2026-10-10 00:00 UTC). **The official read runs on a fetch after 2026-10-10 00:00 UTC (re-dated 2026-10-08 with the trader; if a 2026-10-09 session is uncovered, on the 2026-10-13 final fetch).**
 
 ## 0. Result
 
