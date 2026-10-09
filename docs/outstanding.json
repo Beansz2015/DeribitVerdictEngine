@@ -1,22 +1,15 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-08T18:10Z",
-  "updated_by": "orchestrator seat, Opus 5.5 — interim burst-watch read (both sessions below the reference); official read moved to the 10-13 fetch",
+  "updated_utc": "2026-10-08T18:40Z",
+  "updated_by": "orchestrator seat, Opus 5.5 — HH-2 key scope widened by the trader (item closed)",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
   },
   "waiting_on_trader": [
     {
-      "kind": "go",
-      "meaning": "Update the read-only-key scope record to cover the collector and the gate clones, before any key goes on them (your raw-book ruling 2026-10-07; needed before the post-holiday probe run)",
-      "doc": "docs/history-host-and-raw-channel-read-2026-09-28.md",
-      "anchor": "§4, the read-only-key scope record",
-      "since": "2026-10-07"
-    },
-    {
       "kind": "push",
-      "meaning": "Push master — 8 commits ahead of origin: the RSI/volume rule study and its review, the interim burst-watch read, pane updates (no engine code)",
+      "meaning": "Push master — 9 commits ahead of origin: the RSI/volume rule study and its review, the interim burst-watch read, the read-only-key scope widening, pane updates (no engine code)",
       "since": "2026-10-08"
     }
   ],
@@ -69,7 +62,7 @@
       "model": "Opus 5.5, medium (build) + seat, high (backfill judgment)"
     },
     {
-      "what": "After 2026-11-25: raw-book absorption measure (ruled 2026-10-07) — add the deeper-ladder probe arm, run the 24 h two-clone CPU gate with it, then the build; after the post-build gate, size the larger mismatch-record cap from its memory reading; then the touch-crossed close derivation (absorption Stage 1 read)",
+      "what": "After 2026-11-25: raw-book absorption measure (ruled 2026-10-07; key scope widened 2026-10-08; trader mints the new read-only collector key before G2) — add the deeper-ladder probe arm, run the 24 h two-clone CPU gate with it, then the build; after the post-build gate, size the larger mismatch-record cap from its memory reading; then the touch-crossed close derivation (absorption Stage 1 read)",
       "doc": "docs/raw-book-absorption-measure-spec.md",
       "anchor": "ruling box at the top, §5.2a and §5.3",
       "model": "Opus 5.5, high"

@@ -67,6 +67,12 @@
 
 ✅ **RULED 2026-09-28 (trader): `HH-1` = (a), `HH-2` = (a), `HH-3` = (a) (hold B2).**
 
+✅ **`HH-2` SCOPE WIDENED A THIRD TIME 2026-10-08 (UTC) (trader), for the raw-book absorption measure (`RBM-9` (a), [`raw-book-absorption-measure-spec.md`](raw-book-absorption-measure-spec.md)), in the trader's words:**
+> 1. *"HH-2 scope widened: the read-only key may go on (1) the collector box i-0d6c133058876273e, as a new dedicated read-only key stored per RBM-7 (a), for the raw-book absorption measure; (2) the temporary G1 and G2 gate clones for their 24 h runs, removed at termination. Read scope only; never in the repo, a log or a command line."*
+> 2. *"In addition, I approve any AMI or snapshot holding the key after its placement."*
+>
+> ⛔ **This supersedes "the collector box is still excluded" in the 2026-10-05 box below.** Orchestrator note: under `RBM-7` (a) the DPAPI file and the profile's master key travel in every AMI or snapshot of the collector taken after placement (for example a relaunch-backup AMI like `ami-0247c8b7275de49ac`); item 2 approves that. Revoking the key on Deribit is the remedy if an image is ever exposed.
+
 ✅ **`HH-2` SCOPE WIDENED AGAIN 2026-10-05 (trader):** if the raw order-book absorption test needs more than 6 h, it runs on the TEMPORARY AWS instance (`i-0b17cf2c2eb67496e`, or a successor temp instance) instead of the dev machine, which is shut down daily by 03:00–04:00 GMT+8. The key goes on the box only as an env file (mode 600), never on a command line or in a committed file, and leaves with the instance at termination. The collector box is still excluded.
 
 ✅ **`HH-2` SCOPE WIDENED 2026-09-29 (trader):** the read-only key (env vars `DERIBIT_RO_CLIENT_ID` / `DERIBIT_RO_CLIENT_SECRET`) may also be used for the **raw order-book absorption test** (`book.BTC-PERPETUAL.none.10.raw` against the 100 ms fold; the surviving test in `trader-tick-queue.md` §2's "REFUTED ON DIRECTION" row). Every other `HH-2` condition stands: **dev machine only**, env vars only, never on the collector box, never in the repo or a log.
