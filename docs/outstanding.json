@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-08T19:05Z",
-  "updated_by": "orchestrator seat, Opus 5.5 — burst-watch dates corrected: ASIA 2026-10-10, NY with the 2026-10-13 fetch",
+  "updated_utc": "2026-10-11T18:50Z",
+  "updated_by": "orchestrator seat, Opus 5.5 — official ASIA burst-watch read: MISS on rate (re-derivation read queued after the holiday)",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,8 +9,8 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 11 commits ahead of origin: the RSI/volume rule study and its review, the interim burst-watch read, the read-only-key scope widening, pane updates (no engine code)",
-      "since": "2026-10-08"
+      "meaning": "Push master — 1 commit ahead of origin: the official ASIA burst-watch read (MISS on rate) and pane (no engine code)",
+      "since": "2026-10-12"
     }
   ],
   "in_progress": [
@@ -24,12 +24,6 @@
     }
   ],
   "dated": [
-    {
-      "date": "2026-10-10",
-      "what": "Official ASIA burst-watch read (10th covered weekday = the 2026-10-09 session, closes 08:00 UTC = 16:00 GMT+8 on 10-09). Interim read 2026-10-08: ASIA below the reference",
-      "doc": "docs/burst-watch-read-2026-10-08.md",
-      "anchor": "§0"
-    },
     {
       "date": "2026-10-13",
       "what": "Final collector read-back and fetch, as late in the day as possible; then the official NY burst-watch read (NY's 10th covered weekday is the 2026-10-12 session, closing 08:00 GMT+8 on 10-13 — 2026-09-30 is uncovered)",
@@ -55,6 +49,12 @@
       "what": "After 2026-11-25: first fetch, closing history comparison, then the stage-4 pass rule (run dates, 14 days)",
       "doc": "docs/history-data-store-build-spec-back.md",
       "anchor": "decision table, row D-6"
+    },
+    {
+      "what": "After 2026-11-25: ASIA burst-threshold re-derivation read (the official watch read missed on rate; a read, never a threshold change) — alongside burst outcome run 1, which reads the same instrument",
+      "doc": "docs/burst-watch-read-2026-10-08.md",
+      "anchor": "official ASIA read box",
+      "model": "Opus 5.5, high"
     },
     {
       "what": "After 2026-11-25: the merged post-holiday order (ruled 2026-10-07): measurement fixes, daylight-saving session hours, offline closed-bar reads, audit stop geometry with the two zero-reach fixes bundled, ONE forming-bar spec (volume on the engine's dynamic threshold), liquidation park build with the per-session liquidation-size rider, ADX parity and RSI design point, vote-value study; burst decay on its own boundary after burst run 2",

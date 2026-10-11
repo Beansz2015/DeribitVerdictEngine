@@ -4,7 +4,21 @@
 
 ⚠ **INTERIM.** The ruled length is ≥ 10 covered weekday session-days after 2026-09-25. ASIA has 9 and NY has 7 at this fetch. ASIA's 10th is the 2026-10-09 session (closes 08:00 UTC). NY's is the **2026-10-12** session (closes 2026-10-13 00:00 UTC): NY has 7 covered days here because 2026-09-30 is uncovered, so 10-08 and 10-09 bring it only to 9. *(Corrected 2026-10-08: a first draft of this line and of the pane said NY's 10th was the 10-09 session.)* **Official reads: ASIA on a fetch from 2026-10-10; NY on the 2026-10-13 final fetch.** An uncovered day pushes either one a weekday later.
 
-## 0. Result
+## ⭐ OFFICIAL ASIA READ — 2026-10-11 18:3x UTC (2026-10-12 GMT+8): **MISS on rate**
+
+`burst-watch-read.ps1 -FetchFolder aws_fetch/20261011-182009 -Session ASIA -From 2026-09-26` (fetch verified; venue check CLEAN; history comparison PASS, 6 days, 0 mismatches).
+
+| Days | Rows | Fires | Observed | Expected | Diff | Same-side | Band | Verdict |
+|---:|---:|---:|---:|---:|---:|---:|---|---|
+| **10** (2026-09-28 → 10-09, all covered) | 1,588 | 26 | 1.64 % | 4.87 % | **−3.24 pp** | 88.46 % | 1.87–7.87 % | **MISS: rate-in-band** |
+
+- The 10th day, 2026-10-09: 1.89 % against 5.71 % expected (−3.83 pp), instance `41a3e894…`, no restart.
+- **Every one of the 10 days reads below expected** (daily mean −3.24 pp, sd 1.07 pp). The miss is just past the −3 pp edge, but it is not noise around the reference: no day reads above it.
+- Same-side 88.46 % ≥ 85 %: passes. Length 10: passes.
+- **Ruled response (T-5, ruled 2026-08-11, [`d3-asia-burst-watch-read-2026-08-10.md`](d3-asia-burst-watch-read-2026-08-10.md) §10): a re-derivation READ, never a threshold change.** `AVR-2` (a) holds `burst_ratio_threshold` until the burst outcome read. The read goes on the post-holiday list next to burst outcome run 1. Model + effort: Opus 5.5, high.
+- §1 below still applies: no code edge found; the drift starts about 2026-09-21.
+
+## 0. Interim result (2026-10-08)
 
 | Session | Covered days | Rows | Fires | Observed | Expected | Diff | Same-side | Band | Verdict (tool) |
 |---|---:|---:|---:|---:|---:|---:|---:|---|---|
