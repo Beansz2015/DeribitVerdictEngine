@@ -4,6 +4,19 @@
 
 ⚠ **INTERIM.** The ruled length is ≥ 10 covered weekday session-days after 2026-09-25. ASIA has 9 and NY has 7 at this fetch. ASIA's 10th is the 2026-10-09 session (closes 08:00 UTC). NY's is the **2026-10-12** session (closes 2026-10-13 00:00 UTC): NY has 7 covered days here because 2026-09-30 is uncovered, so 10-08 and 10-09 bring it only to 9. *(Corrected 2026-10-08: a first draft of this line and of the pane said NY's 10th was the 10-09 session.)* **Official reads: ASIA on a fetch from 2026-10-10; NY on the 2026-10-13 final fetch.** An uncovered day pushes either one a weekday later.
 
+## ⭐ OFFICIAL NY READ — 2026-10-13 16:3x UTC: **MISS on rate AND same-side**
+
+`burst-watch-read.ps1 -FetchFolder aws_fetch/20261013-163009 -Session NY -From 2026-09-26` (fetch verified; venue check CLEAN; history comparison PASS).
+
+| Days | Rows | Fires | Observed | Expected | Diff | Same-side | Band | Verdict |
+|---:|---:|---:|---:|---:|---:|---:|---|---|
+| **10** (2026-09-28 → 10-12; 09-30 uncovered) | 6,550 | 215 | 3.28 % | 6.35 % | **−3.07 pp** | **84.65 %** | 4.35–8.35 % | **MISS: rate-in-band, same-side** |
+
+- **Every covered day reads below expected** (mean −3.07 pp, sd 1.35 pp); 2026-10-12 read 0.91 % against 5.90 %.
+- Same-side misses the 85 % bar by 0.35 pp on 215 fires — a marginal miss, but a second criterion.
+- 2026-10-13 is uncovered (partial at fetch; the 09:00–09:42 venue halt is outside NY hours).
+- **Response:** NY is judged like ASIA (`AVR-3` (a), ruled 2026-09-26), so ASIA's T-5 response applies — **a re-derivation READ, never a threshold change**; `AVR-2` (a) holds the NY `burst_ratio_threshold` until the burst outcome read. It joins the ASIA re-derivation read after 2026-11-25.
+
 ## ⭐ OFFICIAL ASIA READ — 2026-10-11 18:3x UTC (2026-10-12 GMT+8): **MISS on rate**
 
 `burst-watch-read.ps1 -FetchFolder aws_fetch/20261011-182009 -Session ASIA -From 2026-09-26` (fetch verified; venue check CLEAN; history comparison PASS, 6 days, 0 mismatches).

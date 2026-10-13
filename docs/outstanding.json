@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_utc": "2026-10-11T18:50Z",
-  "updated_by": "orchestrator seat, Opus 5.5 — official ASIA burst-watch read: MISS on rate (re-derivation read queued after the holiday)",
+  "updated_utc": "2026-10-13T16:45Z",
+  "updated_by": "orchestrator seat, Opus 5.5 — final pre-holiday read-back and fetch done; official NY burst-watch read: MISS",
   "away": {
     "from": "2026-10-14",
     "to": "2026-11-25"
@@ -9,27 +9,21 @@
   "waiting_on_trader": [
     {
       "kind": "push",
-      "meaning": "Push master — 1 commit ahead of origin: the official ASIA burst-watch read (MISS on rate) and pane (no engine code)",
-      "since": "2026-10-12"
+      "meaning": "Push master — 2 commits ahead of origin: the official ASIA and NY burst-watch reads, the final pre-holiday collector ledger row, pane (no engine code)",
+      "since": "2026-10-14"
     }
   ],
   "in_progress": [
     {
-      "what": "Collector on AWS, instance 41a3e894 (watchdog restart during a venue halt); read-backs until 2026-10-13",
+      "what": "Collector on AWS, instance ec1dd93c (watchdog restart during a venue halt 2026-10-13, no fault); unattended 2026-10-14 → 2026-11-25. A holiday seat may only run the read-back and, if no row for 30 min, collector.ps1 restart",
       "where": "AWS box i-0d6c133058876273e",
-      "started_utc": "2026-10-01T10:00Z",
+      "started_utc": "2026-10-13T09:42Z",
       "check": "tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e",
       "doc": "docs/aws-collector-deploy-checklist.md",
       "anchor": "§5 deploy ledger"
     }
   ],
   "dated": [
-    {
-      "date": "2026-10-13",
-      "what": "Final collector read-back and fetch, as late in the day as possible; then the official NY burst-watch read (NY's 10th covered weekday is the 2026-10-12 session, closing 08:00 GMT+8 on 10-13 — 2026-09-30 is uncovered)",
-      "doc": "docs/trader-tick-queue.md",
-      "anchor": "TRADER AWAY table, row 5"
-    },
     {
       "date": "2026-12-04",
       "what": "Burst outcome run 1 done (data cut 2026-11-25 00:00 UTC; fresh cache, --run 1, pre-outcome STOP gates)",
@@ -51,9 +45,9 @@
       "anchor": "decision table, row D-6"
     },
     {
-      "what": "After 2026-11-25: ASIA burst-threshold re-derivation read (the official watch read missed on rate; a read, never a threshold change) — alongside burst outcome run 1, which reads the same instrument",
+      "what": "After 2026-11-25: ASIA and NY burst-threshold re-derivation read (both official watch reads missed on rate, NY also on same-side; a read, never a threshold change) — alongside burst outcome run 1, which reads the same instrument",
       "doc": "docs/burst-watch-read-2026-10-08.md",
-      "anchor": "official ASIA read box",
+      "anchor": "official NY and ASIA read boxes",
       "model": "Opus 5.5, high"
     },
     {
